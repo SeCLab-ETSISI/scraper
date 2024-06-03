@@ -1,38 +1,49 @@
 #!/bin/bash
-malware_directory="$(pwd)/../malware"
-reports_directory="$(pwd)/../reports"
-csv_directory="$(pwd)/../csv"
-csv_mlw_directory="$(pwd)/../csv/malware"
-csv_reports_directory="$(pwd)/../csv/reports"
-# List of repositories to be scraped
-repos=(
-    "https://github.com/blackorbird/APT_REPORT.git" # reports
-    "https://github.com/CyberMonitor/APT_CyberCriminal_Campagin_Collections.git" # reports
-    "https://github.com/cyber-research/APTMalware.git" # binaries
-    "https://github.com/GiuseppeLaurenza/dAPTaset.git" # reports & binaries
-    "https://github.com/StrangerealIntel/EternalLiberty.git" # APTs group Names
-)
+
+# Get the directory of the current script
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Define the base directory relative to the script directory
+base_directory="$script_dir/.."
+
+# Define the directories relative to the base directory
+malware_directory="$base_directory/malware"
+reports_directory="$base_directory/reports"
+csv_directory="$base_directory/csv"
+csv_mlw_directory="$csv_directory/malware"
+csv_reports_directory="$csv_directory/reports"
+destination_folder="$base_directory/github"
+
+# Malware repositories
 repos_malware=(
-    "APTMalware"
+    "https://github.com/cyber-research/APTMalware.git"
 )
-# List of report repositories
+
+# Report repositories
 repos_reports=(
-    "APT_REPORT"
-    "APT_CyberCriminal_Campagin_Collections"
+    "https://github.com/blackorbird/APT_REPORT.git"
+    "https://github.com/CyberMonitor/APT_CyberCriminal_Campagin_Collections.git"
 )
-# check not pdf files
+
+# Function to check and create directory
+create_directory_if_not_exists() {
+    local directory=$1
+    if [ ! -d "$directory" ]; then
+        mkdir -p "$directory"
+        echo "Created directory: $directory"
+    fi
+}
+
+# Check for non-PDF files
 search_not_pdf_files() {
     local repo_path=$1
     cd "$repo_path" || exit
-    # Recursively find all files that are application/pdf and not found by using find with iname *.pdf
     find . -type f -exec file --mime-type {} + | grep -E ": application/pdf" | cut -d ':' -f 1 | while read -r pdf_file; do
-        # Checking if the found file path does not end with .pdf
         if [[ ! "$pdf_file" == *.pdf ]]; then
             echo "File without .pdf extension found: $pdf_file"
         fi
     done
 }
-
 
 # Function to generate malware CSV
 generate_malware_csv() {
@@ -63,7 +74,6 @@ generate_reports_csv() {
     echo "report_name|filepath|sha256|campaign|year|original_path" > "$csv_file"
     find "$folder_path" -type f -iname "*.pdf" | while read -r file; do
         if [ -f "$file" ]; then
-            #mod_date=$(git log -1 --format="%ci" -- "$pdf_file")
             sha256=$(sha256sum "$file" | cut -d ' ' -f 1)
             report_name=$(basename "$file")
             new_path="$target_directory/$sha256.pdf"
@@ -73,17 +83,29 @@ generate_reports_csv() {
     done
 }
 
-destination_folder="$(pwd)/../github"
 # Create necessary directories
-mkdir -p "$destination_folder"
-# Clone all repositories
-for repo in "${repos[@]}"; do
+create_directory_if_not_exists "$malware_directory"
+create_directory_if_not_exists "$reports_directory"
+create_directory_if_not_exists "$csv_directory"
+create_directory_if_not_exists "$csv_mlw_directory"
+create_directory_if_not_exists "$csv_reports_directory"
+create_directory_if_not_exists "$destination_folder"
+
+# Clone all malware repositories
+for repo in "${repos_malware[@]}"; do
+    repo_name=$(basename -s .git "$repo")
+    git clone "$repo" "$destination_folder/$repo_name"
+done
+
+# Clone all reports repositories
+for repo in "${repos_reports[@]}"; do
     repo_name=$(basename -s .git "$repo")
     git clone "$repo" "$destination_folder/$repo_name"
 done
 
 # Process reports repositories
-for repo_name in "${repos_reports[@]}"; do
+for repo in "${repos_reports[@]}"; do
+    repo_name=$(basename -s .git "$repo")
     repo_path="$destination_folder/$repo_name"
     echo "Searching not pdf reports for $repo_name"
     search_not_pdf_files "$repo_path"
@@ -92,11 +114,13 @@ for repo_name in "${repos_reports[@]}"; do
     generate_reports_csv "$repo_path" "$reports_directory" "$csv_reports_directory/${repo_name}.csv"
 done
 
-for repo_name in "${repos_malware[@]}"; do
+# Process malware repositories
+for repo in "${repos_malware[@]}"; do
+    repo_name=$(basename -s .git "$repo")
     repo_path="$destination_folder/$repo_name"
     if [ "$repo_name" = "APTMalware" ]; then
         repo_path="$repo_path/samples/"
-        for binary_path in $repo_path*; do
+        for binary_path in "$repo_path"*; do
             if [ -f "$binary_path" ]; then
                 target_directory=$(dirname "$binary_path")
                 unzip -P infected "$binary_path" -d "$target_directory"
@@ -106,7 +130,6 @@ for repo_name in "${repos_malware[@]}"; do
     fi
     echo "> Generating malware CSV for $repo_path"
     generate_malware_csv "$repo_path" "$malware_directory" "$csv_mlw_directory/${repo_name}.csv"
-
 done
 
 echo "Processing and CSV generation completed."
