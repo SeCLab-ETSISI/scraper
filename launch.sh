@@ -4,7 +4,6 @@
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 scrapers_dir="$script_dir/scrapers"
 
-
 # scripts may be bash or python
 launch_scripts() {
     for script in "$scrapers_dir"/*; do
