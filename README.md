@@ -41,26 +41,19 @@ This repository contains data and scripts for scraping and extracting APTs malwa
 
 Formally the structure is:
 
+```txt
 scraping/
-
   ├── malware/
-  
   ├── reports/
-  
-  ├── csv/
+  ├── scrapers/
+  └── csv/
+      ├── malware/            <------
+      └── reports/            <------
+          ├── Source_1/
+          ├── ...
+          └── Source_N/
 
------->└──  malware/
-        
------->└── reports/
-
-  ├── Source\_1/
-  
-  ├── ...
-  
-  ├── Source\_N/
-
-  └── Scrapers/
-
+```
 
 ## Folder Descriptions
 
@@ -93,3 +86,21 @@ scraping/
 WIP ...
 
 
+
+## Contribute
+
+### Commit && PR Messages
+
+Messages should follow this format:
+```txt
+[MODULE][FIX|ADD|DELETE] Summary of modifications
+```
+
+#### Example
+
+```txt
+* [README][ADD] Execution && Component diagram
+* [SCRAPERS][ADD] MITRE scraper
+* [RUN_SCRAPERS][DELETED]
+* [SCRAPER][FIX] Folder creation bug
+```
