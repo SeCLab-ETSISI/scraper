@@ -83,8 +83,20 @@ scraping/
 
 
 ## How to Use
-WIP ...
+The `launch.sh` script, in the `scraping` directory, will launch every script in that directory.
 
+New scrapers (scripts) must add the following data to generated csv files:
+
+```txt
+filepath|sha256|md5|sha1|campaign|year|original_path|original_name
+```
+
+Using the pipe (`|`) character as a separator.
+
+# WIP
+
+* Making scrapers (other than github_scraper.sh) introduce data into the csv files
+* An insert script which reads from .csv files and inserts data into mongodb
 
 
 ## Contribute
