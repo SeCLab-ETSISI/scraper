@@ -4,41 +4,6 @@ This repository contains data and scripts for scraping and extracting APTs malwa
 
 ## Folder Structure
 
-./csv:
-
-   ./csv/malware:
-
-      APTMalware.csv
-
-      vx\_underground.csv
-
-   ./csv/reports:
-
-      APT\_REPORT.csv
-
-      vx\_underground.csv
-
-./scrapesr:
-
-   github\_scraper.sh
-
-   vx\_underground\_scraper.sh
-
-./github:
-
-   APT\_REPORT/
-
-   /vx\_underground/
-
-./malware:
-
-   003da3a1e5c69e11bacb2a3b4d9994cdad6b5cc866917a3389de7a16ecf6e88e
-
-./reports:
-
-   1231a3a1e5c69e11bacb2a3b4d9994cdad6b5cc866917a3389de7a16e1312371.pdf
-
-
 Formally the structure is:
 
 ```txt
