@@ -2,7 +2,8 @@ import requests
 from readability import Document
 from bs4 import BeautifulSoup
 
-url = "https://www.sentinelone.com/labs/a-glimpse-into-future-scarcruft-campaigns-attackers-gather-strategic-intelligence-and-target-cybersecurity-professionals/"
+page_num=1
+url="https://blogs.blackberry.com/bin/blogs?page={page_num}&category=https://blogs.blackberry.com/en/category/research-and-intelligence&locale=en"
 
 response = requests.get(url)
 doc = Document(response.content)
