@@ -22,12 +22,12 @@ def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str], token
         if response.status_code == 200:
             return response.json()['commit']['sha'], branch
         elif response.status_code in [401, 403, 404]:
-            print(f"Branch {branch} not found or access denied: {response.status_code}")
+            print(f"[-] Branch {branch} not found or access denied: {response.status_code}")
         else:
-            print(f"Error fetching commit SHA for branch {branch}: {response.status_code} - {response.text}")
+            print(f"[-] Error fetching commit SHA for branch {branch}: {response.status_code} - {response.text}")
             response.raise_for_status()
     
-    raise ValueError("None of the specified branches were found in the repository.")
+    raise ValueError("[?] None of the specified branches were found in the repository.")
 
 
 def get_github_repo_tree(owner: str, repo: str, sha: str, token: str) -> List[dict]:
@@ -46,7 +46,7 @@ def get_github_repo_tree(owner: str, repo: str, sha: str, token: str) -> List[di
     if response.status_code == 200:
         return response.json().get('tree', [])
     else:
-        print(f"Error fetching repository tree: {response.status_code} - {response.text}")
+        print(f"[-] Error fetching repository tree: {response.status_code} - {response.text}")
         response.raise_for_status()
 
 
@@ -64,7 +64,7 @@ def download_file(url: str, local_path: str, token: str = None) -> None:
         with open(local_path, 'wb') as file:
             file.write(response.content)
     else:
-        print(f"Error downloading file: {response.status_code} - {response.text}")
+        print(f"[-] Error downloading file: {response.status_code} - {response.text}")
         response.raise_for_status()
 
 
