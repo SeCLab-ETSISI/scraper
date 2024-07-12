@@ -13,11 +13,25 @@ import hashlib
 
 
 def getHashFromString(str):
+
+    """
+    Get a Hash Sha256 from a given string
+    :param str: string to be hashed
+    :return: SHA256 of the string.
+    """
+	
   return hashlib.sha256(str.encode('utf-8')).hexdigest()
 
 
 	
 def buscarPDF(html_source):
+
+    """
+    looks for a pdf file in a html web page and adds its link to a txt with name encontrado.txt
+    :param html_source: html code of the web page
+    :return: boolean encontrado that would be true if a pdf file is found.
+    """
+	
   encontrado = False
   soup = BeautifulSoup(html_source, "html.parser")
   for link in soup.findAll('a'):
@@ -43,6 +57,13 @@ from lxml.html.soupparser import convert_tree
 
 def extraccionTextoEImagenes2 (html,path):
 
+	    """
+    Extracts text and images from a given html page
+    :param html: html file that contains the text and images to be scraped
+    :param path: path where the data will be stored
+    
+    """
+
     try:
 
       is_probably_readerable(html)
@@ -67,7 +88,7 @@ def extraccionTextoEImagenes2 (html,path):
         f.write(texto)
 
       #Procedemos a descargar las imagenes usando la función descargar imagenes
-      descargarImagenesDeURL2(newpath,html,newpath)
+      descargarImagenesDeURL2(html,newpath)
     except:
       print("ERROR 200: url has no readable text")
 
@@ -79,7 +100,14 @@ import requests
 import random
 from time import sleep
 
-def descargarImagenesDeURL2(newpath, response, path):
+def descargarImagenesDeURL2(response, path):
+
+	    """
+    downloads images form a given URL 
+    :param response: html body of the webpage
+    :param path: path where the images will be stored
+    """
+	
   #Buscar todos los links a archivos png
 
   html = extract(response, include_images=True)
@@ -92,7 +120,7 @@ def descargarImagenesDeURL2(newpath, response, path):
         urlImagen = candidato[4:-1]
         n = random.randrange(3,17)
         sleep(n)
-        descargarImagen2(newpath,urlImagen,path)
+        descargarImagen2(urlImagen,path)
       except:
         print("Error 300: Image could not be downloaded from url : " + candidato)
 
@@ -142,7 +170,15 @@ import undetected_chromedriver as uc
 import time
 import random
 
-def descargarImagen2(newpath, imagen_url,path):
+def descargarImagen2(imagen_url,path):
+
+	    """
+    downloads an image form a given URL 
+    :param image_url: url from the image to download
+    :param path: path where the images will be stored
+    
+    """
+	
   # Set ChromeOptions for the headless browser and maximize the window
   options = uc.ChromeOptions()
   options.add_argument("--headless")
@@ -161,9 +197,9 @@ def descargarImagen2(newpath, imagen_url,path):
 
   nombre = path + "//" +imagen_url[imagen_url.rfind("/"):]
   #nombre = path + getHashFromString(imagen_url) + ".png"
-  print(nombre)
+ 
   nombre2 = nombre[:nombre.rfind(".")] + ".png"
-  print(nombre2)
+
   driver.get(imagen_url)
   driver.save_screenshot(nombre2)
   # Quit the browser instance
@@ -173,6 +209,13 @@ def descargarImagen2(newpath, imagen_url,path):
 
 
 def genericScraper(enlacesUnicos):
+
+		    """
+    Given a txt file full of links to scrape genericScraper will scrape all relevant information
+    :param enlacesunicos: txt file with the links to scrape
+    
+    """
+	
   n = random.randrange(3,17)
   
   with open(enlacesUnicos,"r") as l:
