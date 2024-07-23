@@ -230,3 +230,27 @@ def genericScraper(enlacesUnicos):
       #print (html_pdf)
       if(not buscarPDF(html_pdf)):
         extraccionTextoEImagenes2(html_pdf,carpeta)
+
+
+def scraperGenerico2(enlacesUnicos):
+
+	 """
+    Given a dict full of links to scrape genericScraper will scrape all relevant information
+    :param enlacesunicos: dict with the links to scrape
+    
+    """
+
+
+  n = random.randrange(3,17)
+
+  for line in enlacesUnicos:
+      sleep(n)
+      #print(1)
+
+      carpeta = re.search("^(https?:\/\/)?(www\.)?([^\.]+)?", line).group(3)  + "/"
+
+      #print(line)
+      html_pdf = byPassScrapper(line)
+      #print (html_pdf)
+      if(not buscarPDF(html_pdf)):
+        extraccionTextoEImagenes2(html_pdf,carpeta)
