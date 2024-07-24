@@ -14,14 +14,14 @@ def get_metadata(file_path):
     print("Number of pages:", len(reader.pages))
 
     metadata_dict = {
-        "Title": meta.title,
-        "Author": meta.author,
-        "Subject": meta.subject,
-        "Creator": meta.creator,
-        "Producer": meta.producer,
-        "Creation Date": meta.creation_date,
-        "Modification Date": meta.modification_date,
-        "XMP Metadata": meta.xmp_metadata
+        "Title": getattr(meta, 'title', None),
+        "Author": getattr(meta, 'author', None),
+        "Subject": getattr(meta, 'subject', None),
+        "Creator": getattr(meta, 'creator', None),
+        "Producer": getattr(meta, 'producer', None),
+        "Creation Date": getattr(meta, 'creation_date', None),
+        "Modification Date": getattr(meta, 'modification_date', None),
+        "XMP Metadata": getattr(meta, 'xmp_metadata', None)
     }
 
     return metadata_dict
