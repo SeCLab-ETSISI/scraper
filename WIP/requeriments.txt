@@ -1,2 +1,0 @@
-!pip install readability-lxml
-!pip install beautifulsoup4

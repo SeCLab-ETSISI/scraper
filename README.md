@@ -7,64 +7,63 @@ This repository contains data and scripts for scraping and extracting APTs malwa
 Formally the structure is:
 
 ```txt
-scraping/
-  ├── malware/
-  ├── reports/
-  ├── scrapers/
-  └── csv/
-      ├── malware/            <------
-      └── reports/            <------
-          ├── Source_1/
-          ├── ...
-          └── Source_N/
-
+.
+├── LICENSE
+├── README.md
+├── requirements.txt
+├── link_extractors
+├── links
+│   └── links.csv
+└── superscraper
+    ├── globals.py
+    ├── metadata.py
+    ├── superscraper.py
+    └── utils.py
 ```
 
 ## Folder Descriptions
 
-- **malware/**: This folder contains unique APTs malware samples extracted from various sources. Each filename is the computed sha256 of the file.
+- **link_extractors/** contains extractors for webs that contain multiple reports (and each report has its own URL). Each website needs a different extractor since they have different structures.
 
-- **reports/**: This folder contains APTs reports extracted from various sources. Each filename is the computed sha256 of the file.
+- **links/** should contain each individual repor's links. It was separated into a different folder in order to allow the possibility of making separate .csv files for different providers.
 
-- **csv/**: This folder contains two folders with different CSV files with information of the malware and the extracted reports.
-  - **malware/**: Contains a CSV file per source of malware data. The CSV format is as follows:
-    - `filepath`: Path to the malware file.
-    - `sha256`: SHA-256 hash of the malware file.
-    - `campaign`: Campaign associated with the malware.
-    - `year`: Year of the malware campaign.
-    - `original_path`: Original path from where the malware was sourced.
-    - `original_name`: Original name of the malware file.
-  - **reports/**: Contains a CSV file per source of malware data. The CSV format is as follows:
-    - `report_name`: Name of the report.
-    - `filepath`: Path to the report file.
-    - `sha256`: SHA-256 hash of the report file.
-    - `campaign`: Campaign associated with the report.
-    - `year`: Year of the report.
-    - `original_path`: Original path from where the report was sourced.
-
-- **Source_1/**, ..., **Source_N/**: These folders contain the extracted data from each source.
-
-- **Scrapers/**: This folder contains the scraping scripts for extracting data from different sources.
+- **superscraper/** contains the necessary scripts in order to extract text and metadata from pdf files or URLs, and store them in a MongoDB database. 
 
 
 ## How to Use
-The `launch.sh` script, in the `scraping` directory, will launch every script in that directory.
 
-New scrapers (scripts) must add the following data to generated csv files:
-
-```txt
-filepath|sha256|md5|sha1|campaign|year|original_path|original_name
+It is recommended to create a virtual environment to install the correct dependencies and avoid conflicts:
+```sh
+python3 -m venv my-virtual-environment
+pip install -r requirements.txt
 ```
+The `.env` file located in the `superscraper` directory must be set to the relevant MongoDB constants.
 
-Using the pipe (`|`) character as a separator.
+The `superscraper.py` script, in the `superscraper` directory, will crawl over the `links.csv` file, extracting information from every single one of them. Two behaviours may occur:
+
+  * **Encountering a GitHub repository (meta-source)**: they normally contain .pdf files, so every pdf file contained in the repository is downloaded, and has is text and metadata extracted. 
+
+  * **Encountering an individual report's URL**: the report's text is extracted and inserted into MongoDB along with some relevant metadata.
+
 
 # WIP
 
-* Making scrapers (other than github_scraper.sh) introduce data into the csv files
-* An insert script which reads from .csv files and inserts data into mongodb
+* Increasing the number of link extractors to introduce more data into the csv files
+
+
 
 
 ## Contribute
+Text extraction functions for pdf files and URLs are designed to be generic. Both efficiency upgrades and link extractors for specific vendors are welcome.
+
+The structure for a link extractor must be as follows:
+
+```py
+def <provider>_link_extractor(blog_url: str):
+  """
+  extractor code
+  """
+```
 
 ### Commit && PR Messages
 
