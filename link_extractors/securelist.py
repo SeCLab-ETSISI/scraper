@@ -1,63 +1,47 @@
-import requests
+import aiohttp
+import asyncio
 from bs4 import BeautifulSoup
-import time
 
-def get_report_links():
-    base_url = "https://www.secureworks.com/research?page="
-    page_num = 1
-    report_links = []
-    max_retries = 3  # Number of retries for each page
+async def fetch_securelist_links(session, page_url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
 
-    while True:
-        url = f"{base_url}{page_num}"
-        print(f"Fetching URL: {url}")  # Debugging print
-        retries = 0
+    try:
+        async with session.get(page_url, headers=headers) as response:
+            response.raise_for_status()
+            content = await response.text()
+            soup = BeautifulSoup(content, 'html.parser')
+            links = []
 
-        while retries < max_retries:
-            try:
-                response = requests.get(url, headers=headers)
-                response.raise_for_status()  # Raise an error for bad status codes
+            for article in soup.find_all('article', class_='c-card'):
+                a_tag = article.find('a', class_='c-card__link')
+                if a_tag and 'href' in a_tag.attrs:
+                    links.append(a_tag['href'])
+            return links
+    except aiohttp.ClientError as e:
+        print(f"Finishing due to request error: {e}")
+        return []
 
-                soup = BeautifulSoup(response.content, "html.parser")
-                container = soup.find("div", class_="cards-container")
-                if not container:
-                    print(f"No cards container found on page {page_num}")
-                    break
+async def extract_links():
+    base_url = "https://securelist.com/category/apt-reports/page/"
+    page_num = 1
+    all_links = []
 
-                cards = container.find_all("a", class_="FilterCard css-tfil0o ef3voxb0")
-                print(f"Number of links found on page {page_num}: {len(cards)}")  # Debugging print
-
-                if not cards:
-                    break
-
-                for card in cards:
-                    href = card.get("href")
-                    if href:
-                        full_link = "https://www.secureworks.com" + href
-                        print(f"Found link: {full_link}")  # Debugging print
-                        report_links.append(full_link)
-
-                page_num += 1
-                break  # Exit retry loop if successful
-
-            except requests.exceptions.RequestException as e:
-                print(f"RequestException on page {page_num}, retrying ({retries + 1}/{max_retries})...")
-                retries += 1
-                time.sleep(2)  # Wait before retrying
-
-            except Exception as e:
-                print(f"An error occurred: {e}")
+    async with aiohttp.ClientSession() as session:
+        while True:
+            page_url = f"{base_url}{page_num}/?securelist-2020-ajax=false"
+            print(f"Fetching page {page_num}...")
+            links = await fetch_securelist_links(session, page_url)
+            if not links:
                 break
+            all_links.extend(links)
+            page_num += 1
+    
+    return all_links
 
-        if retries == max_retries:
-            print(f"Max retries reached for page {page_num}, stopping.")
-            break
-
-    return report_links
+extract_links.__name__ = "securelist_extractor"
 
 if __name__ == "__main__":
-    links = get_report_links()
-    print(f"Total number of links found: {len(links)}")  # Debugging print
+    links = asyncio.run(extract_links())
+    print(f"Found {len(links)} links.")

@@ -1,4 +1,5 @@
-import requests
+import aiohttp
+import asyncio
 import csv
 import os
 
@@ -24,18 +25,20 @@ def is_reliable(url):
     # Check if the domain is in the list of unreliable sources
     return domain not in unreliable_sources
 
-def download_csv(url, filename):
-    response = requests.get(url)
-    with open(filename, 'wb') as file:
-        file.write(response.content)
+async def download_csv(url, filename):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            content = await response.read()
+            with open(filename, 'wb') as file:
+                file.write(content)
 
-def read_and_filter_csv(filename):
+async def read_and_filter_csv(filename):
     reliable_links = []
     with open(filename, 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
             for key in ['Sources_1', 'Sources_2', 'Sources_3']:
-                if row[key] and is_reliable(row[key]):
+                if key in row and row[key] and is_reliable(row[key]):
                     reliable_links.append(row[key])
     return reliable_links
 
@@ -43,18 +46,25 @@ def delete_file(filename):
     if os.path.exists(filename):
         os.remove(filename)
 
-if __name__ == "__main__":
+async def extract_links():
     csv_url = 'https://www.cfr.org/interactive/cyber-operations/export-incidents?_format=csv'
     csv_filename = 'cyber_operations.csv'
     
     # Step 1: Download the CSV file
-    download_csv(csv_url, csv_filename)
+    await download_csv(csv_url, csv_filename)
     
     # Step 2 & 3: Read and filter the CSV file
-    reliable_links = read_and_filter_csv(csv_filename)
+    reliable_links = await read_and_filter_csv(csv_filename)
     
     # Step 4: Delete the CSV file
     delete_file(csv_filename)
     
-    # Output the reliable links
-    print(f"Found {len(reliable_links)} reliable links:")
+    return reliable_links
+
+extract_links.__name__ = "cyber_operations_tracker_extractor"
+
+if __name__ == "__main__":
+    links = asyncio.run(extract_links())
+    print(f"Found {len(links)} reliable links:")
+    for link in links:
+        print(link)

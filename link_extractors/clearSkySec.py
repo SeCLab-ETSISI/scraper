@@ -1,104 +1,49 @@
-<<<<<<< HEAD
-import time
-import random
+# WIP: robots.txt complciations
+
+"""import requests
 from bs4 import BeautifulSoup
-import undetected_chromedriver as uc
+import logging
 
-def fetch_clearskysec_links(page_url):
-    options = uc.ChromeOptions()
-    options.headless = True
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--disable-extensions')
-    options.add_argument('--disable-blink-features=AutomationControlled')
-
-    driver = uc.Chrome(options=options)
+def fetch_links(page_url):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
     
     try:
-        driver.get(page_url)
-        print(f"Fetching {page_url} - Page title: {driver.title}")
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        response = requests.get(page_url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
         links = []
-
-        for article in soup.find_all('article', class_='post'):
-            a_tag = article.find('a', rel='bookmark')
+        
+        for article in soup.find_all('article'):
+            a_tag = article.find('a', class_='cta')
             if a_tag and 'href' in a_tag.attrs:
                 links.append(a_tag['href'])
-            else:
-                print(f"No link found in article: {article}")
-        driver.quit()
+        logging.debug(f"Fetched {len(links)} links from {page_url}")
         return links
-    except Exception as e:
-        print(f"Request error: {e}")
-        driver.quit()
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Request error: {e}")
         return []
 
-def fetch_all_clearskysec_links(base_url):
+def fetch_all_links(base_url):
     all_links = []
     page = 1
     while True:
-        page_url = f"{base_url}/page/{page}/"
-        print(f"Fetching page {page}...")
-        links = fetch_clearskysec_links(page_url)
+        page_url = f"{base_url}&page={page}"
+        logging.debug(f"Fetching page {page_url}...")
+        links = fetch_links(page_url)
         if not links:
             break
         all_links.extend(links)
         page += 1
-        time.sleep(random.uniform(3, 17))  # Sleep to mimic human browsing
+    logging.debug(f"Total links fetched: {len(all_links)}")
     return all_links
 
+def extract_links():
+    base_url = 'https://www.clearskysec.com/blog/'
+    return fetch_all_links(base_url)
+
 if __name__ == "__main__":
-    CLEARSKYSEC_URL_BASE = "https://www.clearskysec.com/blog"
-    links = fetch_all_clearskysec_links(CLEARSKYSEC_URL_BASE)
-    print(f"Found {len(links)} ClearSkySec URLs.")
-
-=======
-import re
-import requests
-from bs4 import BeautifulSoup
-from typing import List
-
-def valid_url(url: str) -> bool:
-    """
-    Check if a URL is valid based on specific criteria.
-
-    :param url: The URL to validate.
-    :return: True if the URL is valid, False otherwise.
-    """
-    pattern = re.compile(
-        r"^https://www\.clearskysec\.com/(?!company/|solutions/|blog/|partners/|contact-us/|feed/)[^/]+/[^/]+/$"
-    )
-    return bool(pattern.match(url))
-
-def extract_links() -> List[str]:
-    """
-    Extract all valid links from the ClearSkySec blog page.
-
-    :return: A list of valid URLs.
-    """
-    url = "https://www.clearskysec.com/blog/"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        print("Fetched content successfully")  # Debug statement
-    except requests.RequestException as e:
-        print(f"[-] Error fetching the URL: {e}")
-        return []
-
-    soup = BeautifulSoup(response.text, 'html.parser')
-    print("Parsing content...")  # Debug statement
-
-    links = [a_tag.get('href') for a_tag in soup.find_all('a') if a_tag.get('href') and valid_url(a_tag.get('href'))]
-    if links:
-        print("Found links:")  # Debug statement
-        for link in links:
-            print(link)
-    else:
-        print("No valid links found")  # Debug statement
-    return links
-
-# Example usage
-if __name__ == "__main__":
-    extract_links()
->>>>>>> da0da84b842302d40514ef4e9856d32896efa675
+    links = extract_links()
+    print(f"Found {len(links)} links.")
+"""
