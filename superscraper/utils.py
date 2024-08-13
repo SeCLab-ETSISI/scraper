@@ -33,7 +33,7 @@ def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str], token
     for branch in branches:
         url = f"https://api.github.com/repos/{owner}/{repo}/branches/{branch}"
         print(f"Fetching branch info from URL: {url}")  # Debugging statement
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, verify=False)
         if response.status_code == 200:
             return response.json()['commit']['sha'], branch
         elif response.status_code in [401, 403, 404]:
@@ -136,19 +136,26 @@ def get_text_from_pdf(pdf_path: str) -> str:
 
 def extract_text_from_url(url: str) -> str:
     """
-    Extract text and metadata from a URL and save to MongoDB.
+    Extract text and metadata from a URL.
 
     :param url: URL of the website to extract text from.
     :return: Extracted text.
     """
-    response = requests.get(url, headers=HEADERS)
-    if response.status_code == 200:
-        doc = Document(response.text)
-        soup = BeautifulSoup(doc.summary(), 'html.parser')
-        text = soup.get_text(strip=True)
-        return text
-    else:
-        print(f"[-] Error fetching URL {url}: {response.status_code}")
+    if not re.match(r'http[s]?://', url):
+        url = 'https://' + url
+
+    try:
+        response = requests.get(url, headers=HEADERS, verify=False)  # Disable SSL verification
+        if response.status_code == 200:
+            doc = Document(response.text)
+            soup = BeautifulSoup(doc.summary(), 'html.parser')
+            text = soup.get_text(strip=True)
+            return text
+        else:
+            print(f"[-] Error fetching URL {url}: {response.status_code}")
+            return ""
+    except Exception as e:
+        print(f"[-] Request error fetching URL {url}: {e}")
         return ""
 
 def getMinHashFromFullText(text):
@@ -242,3 +249,21 @@ def insert_into_db(text, minhash, iocs):
     }
     collection.insert_one(document)
     print("[+] Document inserted successfully.")
+
+def load_existing_minhashes_from_db():
+    """
+    Load existing MinHashes from MongoDB.
+
+    Returns:
+    List of MinHash objects.
+    """
+    existing_minhashes = []
+    for record in collection.find({}, {'minhash': 1}):
+        if 'minhash' in record:
+            mh = MinHash()
+            # reconstruct the MinHash object with the stored digest (list of integers)
+            mh._hashvalues = record['minhash']  # directly set the hash values
+            existing_minhashes.append(mh)
+        else:
+            print(f"Record with ID {record['_id']} is missing the 'minhash' field and will be skipped.")
+    return existing_minhashes
