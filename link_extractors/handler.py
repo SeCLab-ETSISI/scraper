@@ -41,31 +41,35 @@ async def get_all_extractors() -> List[Callable[[], List[str]]]:
     return extractors
 
 def remove_duplicates(links: List[str]) -> List[str]:
-    return list(set(links))
+    unique_links = list(set(links))
+    num_duplicates = len(links) - len(unique_links)
+    logging.debug(f"Removed {num_duplicates} duplicate links.")
+    return unique_links, num_duplicates
 
-async def append_to_csv(links: List[str], csv_path: str) -> None:
-    logging.debug(f"Appending to CSV at: {csv_path}")
-    
-    if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
-        # create a new CSV file if it doesn't exist
-        df = pd.DataFrame(links, columns=['link'])
-        df.to_csv(csv_path, index=False)
-        logging.debug(f"Created new CSV file with links")
-    else:
-        try:
-            existing_links = pd.read_csv(csv_path)
-            all_links = existing_links['link'].tolist() + links
-            unique_links = remove_duplicates(all_links)
-            df = pd.DataFrame(unique_links, columns=['link'])
-            df.to_csv(csv_path, index=False)
-            logging.debug(f"Appended links to existing CSV file")
-        except pd.errors.EmptyDataError:
-            # in case the CSV file exists but is empty
+async def append_to_csv(links: List[str], csv_path: str, lock: asyncio.Lock) -> None:
+    async with lock:  # exclusive access to the CSV file
+        logging.debug(f"Appending to CSV at: {csv_path}")
+        
+        if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
+            # create a new CSV file if it doesn't exist
             df = pd.DataFrame(links, columns=['link'])
             df.to_csv(csv_path, index=False)
-            logging.debug(f"CSV file was empty. Created new CSV file with links")
+            logging.debug(f"Created new CSV file with links")
+        else:
+            try:
+                existing_links = pd.read_csv(csv_path)
+                all_links = existing_links['link'].tolist() + links
+                unique_links, num_duplicates = remove_duplicates(all_links)
+                df = pd.DataFrame(unique_links, columns=['link'])
+                df.to_csv(csv_path, index=False)
+                logging.debug(f"Appended links to existing CSV file, {num_duplicates} duplicates removed in total")
+            except pd.errors.EmptyDataError:
+                # in case the CSV file exists but is empty
+                df = pd.DataFrame(links, columns=['link'])
+                df.to_csv(csv_path, index=False)
+                logging.debug(f"CSV file was empty. Created new CSV file with links")
 
-async def run_extractor(extractor):
+async def run_extractor(extractor, lock, all_links):
     try:
         logging.debug(f"Running extractor {extractor.__name__}")
         start_time = time.time()
@@ -80,7 +84,12 @@ async def run_extractor(extractor):
 
         if links:
             logging.debug(f"Extractor {extractor.__name__} returned {len(links)} links")
+            # sample log of the links for debugging
+            logging.debug(f"Sample links: {links[:5]}")
             print(f"Extractor {extractor.__name__} returned {len(links)} links")  # number of links obtained
+            
+            async with lock:  # ensure safe access to shared resource
+                all_links.extend(links)
             return extractor.__name__, links
         else:
             logging.warning(f"Extractor {extractor.__name__} returned no links")
@@ -90,33 +99,44 @@ async def run_extractor(extractor):
         return extractor.__name__, []
 
 async def main() -> None:
+    start_time = time.time()
     csv_path = os.path.join(parent_dir, 'links', 'links.csv')  # path to links.csv 
     logging.debug(f"CSV path: {csv_path}")
     
     all_links = []
     extractor_results = {}
+    total_duplicates_removed = 0
+    lock = asyncio.Lock()  # prevent race conditions
 
     extractors = await get_all_extractors()  # get all extractor functions
     logging.debug(f"Found {len(extractors)} extractors")
 
-    tasks = [run_extractor(extractor) for extractor in extractors]
+    tasks = [run_extractor(extractor, lock, all_links) for extractor in extractors]
     results = await asyncio.gather(*tasks)
 
     for extractor_name, links in results:
-        if links:
-            all_links.extend(links)  # append links to the all_links list
         extractor_results[extractor_name] = len(links)
 
+    logging.debug(f"Total collected links before removing duplicates: {len(all_links)}")
+    
     if all_links:
-        unique_links = remove_duplicates(all_links)  # remove duplicates from list
+        unique_links, duplicates_removed = remove_duplicates(all_links)  # remove duplicates from list
+        total_duplicates_removed += duplicates_removed
         logging.debug(f"Total unique links: {len(unique_links)}")
-        await append_to_csv(unique_links, csv_path)  # append unique links to links.csv
+        logging.debug(f"Total duplicates removed across all extractors: {total_duplicates_removed}")
+        await append_to_csv(unique_links, csv_path, lock)  # append unique links to links.csv
         logging.debug("Completed appending links to CSV")
     else:
         logging.warning("No links were collected from any extractor")
 
+    end_time = time.time()
+    total_runtime = end_time - start_time
+    logging.debug(f"Total runtime: {total_runtime:.2f} seconds")
+
     print("Documents extracted by each extractor:")
     print(extractor_results)
+    print(f"Total duplicates removed: {total_duplicates_removed}")
+    print(f"Total runtime: {total_runtime:.2f} seconds")
 
 if __name__ == "__main__":
     asyncio.run(main())
