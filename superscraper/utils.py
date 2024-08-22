@@ -33,7 +33,7 @@ def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str], token
     for branch in branches:
         url = f"https://api.github.com/repos/{owner}/{repo}/branches/{branch}"
         print(f"Fetching branch info from URL: {url}")  # Debugging statement
-        response = requests.get(url, headers=headers, verify=False)
+        response = requests.get(url, headers=headers, timeout=10)# , verify=False)
         if response.status_code == 200:
             return response.json()['commit']['sha'], branch
         elif response.status_code in [401, 403, 404]:
@@ -99,11 +99,30 @@ def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches: List
     if not os.path.exists(repo_dir):
         os.makedirs(repo_dir)
 
-    sha, valid_branch = get_github_repo_commit_sha(owner, repo, branches, token)
+    sha = None
+    valid_branch = None
+    for branch in branches:
+        try:
+            sha, valid_branch = get_github_repo_commit_sha(owner, repo, [branch], token)
+            break  # Stop if a valid branch is found
+        except ValueError as e:
+            print(f"[-] Error finding branch '{branch}': {e}")
+    
+    if not sha:
+        print(f"[-] No valid branches found in {repo}.")
+        return
+
     tree = get_github_repo_tree(owner, repo, sha, token)
+    
+    if not tree:
+        print(f"[-] No files found in the repository tree for branch '{valid_branch}'.")
+        return
+
+    found_pdfs = False
 
     for item in tree:
         if item['type'] == 'blob' and item['path'].endswith('.pdf'):
+            found_pdfs = True
             file_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{valid_branch}/{item['path']}"
             
             try:
@@ -117,6 +136,10 @@ def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches: List
                     insert_into_db(text, minhash, iocs)
             except Exception as e:
                 print(f"[-] Error processing {file_url}: {e}")
+    
+    if not found_pdfs:
+        print(f"[-] No PDF files found in the repository {repo} on branch '{valid_branch}'.")
+
 
 def get_text_from_pdf(pdf_path: str) -> str:
     """
@@ -145,7 +168,7 @@ def extract_text_from_url(url: str) -> str:
         url = 'https://' + url
 
     try:
-        response = requests.get(url, headers=HEADERS, verify=False)  # Disable SSL verification
+        response = requests.get(url, headers=HEADERS, timeout=10)# , verify=False)  # Disable SSL verification
         if response.status_code == 200:
             doc = Document(response.text)
             soup = BeautifulSoup(doc.summary(), 'html.parser')
@@ -235,6 +258,7 @@ def insert_into_db(text, minhash, iocs):
     Returns:
     None
     """
+    print("[+] Getting minhash digest...")
     minhash = getMinHashFromFullText(text)
     minhash_digest = minhash.digest().tolist()
 
@@ -247,6 +271,7 @@ def insert_into_db(text, minhash, iocs):
         "domains": iocs['domains'],
         "date_added": datetime.utcnow()
     }
+    print("[+] Inserting...")
     collection.insert_one(document)
     print("[+] Document inserted successfully.")
 
