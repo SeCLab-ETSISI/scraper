@@ -270,7 +270,8 @@ def insert_into_db(text, minhash, iocs, link):
         "hashes": iocs['hashes'],
         "ip_addrs": iocs['ip_addrs'],
         "domains": iocs['domains'],
-        "date_added": datetime.utcnow()
+        "date_added": datetime.utcnow(),
+        "url": link
     }
     print("[+] Inserting...")
     collection.insert_one(document)
