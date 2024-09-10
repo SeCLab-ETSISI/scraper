@@ -43,7 +43,7 @@ def main():
                 print("Extracting IOCs")
                 iocs = extract_iocs(text)
                 print("Inserting")
-                insert_into_db(text, existing_minhashes, iocs)
+                insert_into_db(text, existing_minhashes, iocs, link)
             else:
                 failed_texts += 1
         i += 1

@@ -133,7 +133,7 @@ def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches: List
                 if text:
                     minhash = getMinHashFromFullText(text)
                     iocs = extract_iocs(text)
-                    insert_into_db(text, minhash, iocs)
+                    insert_into_db(text, minhash, iocs, repo)
             except Exception as e:
                 print(f"[-] Error processing {file_url}: {e}")
     
@@ -246,7 +246,7 @@ def is_duplicate(new_minhash, existing_minhashes, threshold=0.2):
             return True
     return False
 
-def insert_into_db(text, minhash, iocs):
+def insert_into_db(text, minhash, iocs, link):
     """
     Insert the extracted data into MongoDB.
 
@@ -254,6 +254,7 @@ def insert_into_db(text, minhash, iocs):
     text: The full text of the document.
     minhash: The MinHash object.
     iocs: A dictionary of extracted IOCs.
+    link: The link from which the report was extracted.
 
     Returns:
     None
