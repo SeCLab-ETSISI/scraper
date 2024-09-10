@@ -1,4 +1,4 @@
-import os
+import os, re
 import requests
 from typing import List
 from pymongo import MongoClient
@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import hashlib
 import pdfplumber
+from datasketch import MinHash
 
 from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN
 from metadata import get_metadata
@@ -32,7 +33,7 @@ def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str], token
     for branch in branches:
         url = f"https://api.github.com/repos/{owner}/{repo}/branches/{branch}"
         print(f"Fetching branch info from URL: {url}")  # Debugging statement
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=10)# , verify=False)
         if response.status_code == 200:
             return response.json()['commit']['sha'], branch
         elif response.status_code in [401, 403, 404]:
@@ -98,59 +99,196 @@ def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches: List
     if not os.path.exists(repo_dir):
         os.makedirs(repo_dir)
 
-    sha, valid_branch = get_github_repo_commit_sha(owner, repo, branches, token)
+    sha = None
+    valid_branch = None
+    for branch in branches:
+        try:
+            sha, valid_branch = get_github_repo_commit_sha(owner, repo, [branch], token)
+            break  # Stop if a valid branch is found
+        except ValueError as e:
+            print(f"[-] Error finding branch '{branch}': {e}")
+    
+    if not sha:
+        print(f"[-] No valid branches found in {repo}.")
+        return
+
     tree = get_github_repo_tree(owner, repo, sha, token)
+    
+    if not tree:
+        print(f"[-] No files found in the repository tree for branch '{valid_branch}'.")
+        return
+
+    found_pdfs = False
 
     for item in tree:
         if item['type'] == 'blob' and item['path'].endswith('.pdf'):
+            found_pdfs = True
             file_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{valid_branch}/{item['path']}"
             
             try:
                 print(f"\t ╰─[📜] Downloading {item['path']} from {file_url}")
                 local_path = os.path.join(repo_dir, os.path.basename(item['path']))
                 download_file(file_url, local_path, token)
-                save_pdf_to_mongo(local_path)
+                text = get_text_from_pdf(local_path)
+                if text:
+                    minhash = getMinHashFromFullText(text)
+                    iocs = extract_iocs(text)
+                    insert_into_db(text, minhash, iocs)
             except Exception as e:
                 print(f"[-] Error processing {file_url}: {e}")
+    
+    if not found_pdfs:
+        print(f"[-] No PDF files found in the repository {repo} on branch '{valid_branch}'.")
 
-def save_pdf_to_mongo(pdf_path: str):
+
+def get_text_from_pdf(pdf_path: str) -> str:
     """
-    Save PDF text and metadata to MongoDB.
+    Extract text from a PDF file.
 
     :param pdf_path: Local path to the PDF file.
+    :return: Extracted text.
     """
     with pdfplumber.open(pdf_path) as pdf:
         text = ''
         for page in pdf.pages:
-            text += page.extract_text()
+            extracted_text = page.extract_text()
+            if extracted_text:
+                text += extracted_text
 
-    pdf_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
-    metadata = get_metadata(pdf_path)
-    document = {
-        "pdf_hash": pdf_hash,
-        "text": text,
-        "date_added": datetime.utcnow(),
-        **metadata
-    }
-    collection.insert_one(document)
+    return text
 
-def extract_text_from_url(url: str):
+def extract_text_from_url(url: str) -> str:
     """
-    Extract text and metadata from a URL and save to MongoDB.
+    Extract text and metadata from a URL.
 
     :param url: URL of the website to extract text from.
+    :return: Extracted text.
     """
-    response = requests.get(url, headers=HEADERS)
-    if response.status_code == 200:
-        doc = Document(response.text)
-        soup = BeautifulSoup(doc.summary(), 'html.parser')
-        text = soup.get_text()
-        metadata = {
-            "title": doc.short_title(),
-            "url": url,
-            "text": text,
-            "date_added": datetime.utcnow()
-        }
-        collection.insert_one(metadata)
-    else:
-        print(f"[-] Error fetching URL {url}: {response.status_code}")
+    if not re.match(r'http[s]?://', url):
+        url = 'https://' + url
+
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)# , verify=False)  # Disable SSL verification
+        if response.status_code == 200:
+            doc = Document(response.text)
+            soup = BeautifulSoup(doc.summary(), 'html.parser')
+            text = soup.get_text(strip=True)
+            return text
+        else:
+            print(f"[-] Error fetching URL {url}: {response.status_code}")
+            return ""
+    except Exception as e:
+        print(f"[-] Request error fetching URL {url}: {e}")
+        return ""
+
+def getMinHashFromFullText(text):
+    """
+    Returns the MinHash of a given text.
+
+    Parameters:
+    text: text from which to get the MinHash
+    returns mh: MinHash object of the text
+    """
+    if text is None:
+        print("Received None text input, returning empty MinHash.")
+        return MinHash()
+
+    tokens = text.split()
+    mh = MinHash()
+    for token in tokens:
+        mh.update(token.encode('utf8'))
+    return mh
+
+def getSimilarityFromMinHashes(mh_a, mh_b):
+    """
+    Returns the similarity between two given MinHashes.
+
+    Parameters:
+    mh_a: MinHash object from the first text
+    mh_b: MinHash object from the second text
+    returns similarity: a number between 0 and 1, closer to 1 means more similar 
+    """
+    return mh_a.jaccard(mh_b)
+
+def extract_iocs(text):
+    """
+    Extracts IP addresses, domains, and hashes from the given text.
+
+    Parameters:
+    text: The text to extract IOCs from.
+
+    Returns:
+    iocs: Dictionary containing extracted IP addresses, domains, and hashes.
+    """
+    iocs = {
+        'hashes': re.findall(r'\b[a-f0-9]{32,64}\b', text),
+        'ip_addrs': re.findall(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', text),
+        'domains': re.findall(r'\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,})\b', text)
+    }
+    return iocs
+
+
+def is_duplicate(new_minhash, existing_minhashes, threshold=0.2):
+    """
+    Checks if a given MinHash is similar to any MinHash in the existing database.
+
+    Parameters:
+    new_minhash: MinHash of the new text
+    existing_minhashes: List of MinHashes from the existing database
+    threshold: Similarity threshold for considering texts as duplicates
+
+    Returns:
+    bool: True if a duplicate is found, False otherwise
+    """
+    for mh in existing_minhashes:
+        similarity = getSimilarityFromMinHashes(new_minhash, mh)
+        if similarity > (1 - threshold):  # similarity closer to 1 means more similar
+            return True
+    return False
+
+def insert_into_db(text, minhash, iocs):
+    """
+    Insert the extracted data into MongoDB.
+
+    Parameters:
+    text: The full text of the document.
+    minhash: The MinHash object.
+    iocs: A dictionary of extracted IOCs.
+
+    Returns:
+    None
+    """
+    print("[+] Getting minhash digest...")
+    minhash = getMinHashFromFullText(text)
+    minhash_digest = minhash.digest().tolist()
+
+    # Insert the document if it is not a duplicate
+    document = {
+        "text": text,
+        "minhash": minhash_digest,  # Store the digest as a list of integers
+        "hashes": iocs['hashes'],
+        "ip_addrs": iocs['ip_addrs'],
+        "domains": iocs['domains'],
+        "date_added": datetime.utcnow()
+    }
+    print("[+] Inserting...")
+    collection.insert_one(document)
+    print("[+] Document inserted successfully.")
+
+def load_existing_minhashes_from_db():
+    """
+    Load existing MinHashes from MongoDB.
+
+    Returns:
+    List of MinHash objects.
+    """
+    existing_minhashes = []
+    for record in collection.find({}, {'minhash': 1}):
+        if 'minhash' in record:
+            mh = MinHash()
+            # reconstruct the MinHash object with the stored digest (list of integers)
+            mh._hashvalues = record['minhash']  # directly set the hash values
+            existing_minhashes.append(mh)
+        else:
+            print(f"Record with ID {record['_id']} is missing the 'minhash' field and will be skipped.")
+    return existing_minhashes
