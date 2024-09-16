@@ -163,4 +163,4 @@ cython_debug/
 
 .DS_Store
 scraping/scrapers/.DS_Store
-pdf_files/
+pdf_files/scraping-venv/
