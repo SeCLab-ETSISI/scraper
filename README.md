@@ -80,3 +80,9 @@ Messages should follow this format:
 * [RUN_SCRAPERS][DELETED]
 * [SCRAPER][FIX] Folder creation bug
 ```
+
+# Acknowledgements
+
+This software has been created as part of the project "Improving Malware Attribution with Machine Learning"  (C127/23), a collaboration between the Instituto Nacional de Ciberseguridad (INCIBE) and Universidad Politécnica de Madrid. This initiative is part of the Recovery, Transformation, and Resilience Plan funded by the European Union (Next Generation).
+
+![Banner](https://i.imgur.com/XYZ.png)
