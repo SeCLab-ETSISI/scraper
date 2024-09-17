@@ -21,3 +21,5 @@ GH_TOKEN = os.getenv("GH_TOKEN")
 
 if GH_TOKEN is None:
     raise ValueError("[-] GitHub token (GH_TOKEN) not found in .env")
+
+ORKL_API_URL = 'https://orkl.eu/api/v1/library/entries'

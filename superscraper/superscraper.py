@@ -1,5 +1,16 @@
 import pandas as pd
-from utils import extract_pdfs_from_repo, extract_text_from_url, getMinHashFromFullText, is_duplicate, extract_iocs, collection, insert_into_db, load_existing_minhashes_from_db
+from utils import (
+    extract_pdfs_from_repo,
+    extract_text_from_url,
+    getMinHashFromFullText,
+    is_duplicate,
+    extract_iocs,
+    collection,
+    insert_into_db,
+    load_existing_minhashes_from_db,
+    get_orkl_report,
+    process_orkl_report
+)
 from urllib.parse import urlparse
 from globals import GH_TOKEN
 from datasketch import MinHash
@@ -48,6 +59,21 @@ def main():
                 failed_texts += 1
         i += 1
     
+    print("------ Processing ORKL reports ------")
+    offset = 0
+    while True:
+        reports = get_orkl_report(offset=offset, limit=1)
+        if reports is None:
+            print(f"No more reports found at offset {offset}. Stopping.")
+            break  # Stop when ORKL API returns no data
+        
+        for report in reports:
+            process_orkl_report(report, existing_minhashes)
+
+        offset += 1  # Increment the offset to fetch the next report
+
+    print(f"[!] Failed texts: {failed_texts}")
+
     print(f"[!] Failed texts: {failed_texts}")
 
 if __name__ == "__main__":

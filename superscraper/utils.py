@@ -9,7 +9,7 @@ import hashlib
 import pdfplumber
 from datasketch import MinHash
 
-from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN
+from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN, ORKL_API_URL
 from metadata import get_metadata
 
 client = MongoClient(MONGO_CONNECTION_STRING)
@@ -294,3 +294,41 @@ def load_existing_minhashes_from_db():
         else:
             print(f"Record with ID {record['_id']} is missing the 'minhash' field and will be skipped.")
     return existing_minhashes
+
+
+def get_orkl_report(offset=0, limit=1):
+    """
+    Fetch a specific report from ORKL using pagination.
+    
+    :param offset: Offset for the API request.
+    :param limit: Number of reports to fetch (usually 1).
+    :return: The JSON response containing the report data, or an empty list if no data is found.
+    """
+    params = {
+        'limit': limit,
+        'offset': offset,
+        'order_by': 'created_at',
+        'order': 'desc'
+    }
+    
+    response = requests.get(ORKL_API_URL, params=params)
+    
+    if response.status_code == 200:
+        data = response.json().get('data', [])
+        if data:
+            return data
+        else:
+            return None  # Stop condition when data is null or empty
+    else:
+        print(f"Error fetching data from ORKL API: {response.status_code}")
+        return None
+
+def process_orkl_report(report, existing_minhashes):
+    """
+    Process a single ORKL report, extract text, IOCs and insert into the database.
+    
+    :param report: The ORKL report object (as returned by the API).
+    :param existing_minhashes: List of minhashes already existing in the DB.
+    """
+    text = report.get('plain_text')
+    link = f"ORKL Report {report.get('id')}"
