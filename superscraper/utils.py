@@ -318,7 +318,7 @@ def get_orkl_report(offset=0, limit=1):
         if data:
             return data
         else:
-            return None  # Stop condition when data is null or empty
+            return None  # stop condition when data is null or empty
     else:
         print(f"Error fetching data from ORKL API: {response.status_code}")
         return None
@@ -331,4 +331,26 @@ def process_orkl_report(report, existing_minhashes):
     :param existing_minhashes: List of minhashes already existing in the DB.
     """
     text = report.get('plain_text')
+    
+    if not text:
+        print(f"[!] ORKL Report {report.get('id')} has no plain text. Skipping.")
+        return
+
+    # minhash for deduplication
+    print(f"[+] Processing ORKL Report {report.get('id')}")
+    new_minhash = getMinHashFromFullText(text)
+    
+    # duplicate check
+    if is_duplicate(new_minhash, existing_minhashes):
+        print(f"[!] ORKL Report {report.get('id')} is a duplicate. Skipping.")
+        return
+
+    # IOCs
+    print(f"[+] Extracting IOCs from ORKL Report {report.get('id')}")
+    iocs = extract_iocs(text)
+    
+    # insertion
     link = f"ORKL Report {report.get('id')}"
+    print(f"[+] Inserting ORKL Report {report.get('id')} into the database.")
+    insert_into_db(text, new_minhash, iocs, link)
+    print(f"[+] ORKL Report {report.get('id')} processed and inserted successfully.")

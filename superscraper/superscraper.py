@@ -37,6 +37,7 @@ def main():
     ######## i=0
     i = 1
     failed_texts = 0
+    successful_texts = 0
 
     for link in links_df['link']:
         link = link.strip()  # clean up any extra whitespace or quotes
@@ -46,7 +47,7 @@ def main():
             owner, repo = link.split('/')[-2:]
             extract_pdfs_from_repo(owner, repo, '../pdf_files', branches=["main", "master"], token=GH_TOKEN)
             print(f"[+] Processing repo {link}")
-            # Text from PDFs is processed within extract_pdfs_from_repo function now
+            # text from PDFs is processed within extract_pdfs_from_repo function now
         else:
             print(f"Extracting text from URL {link}")
             text = extract_text_from_url(link)
@@ -55,6 +56,7 @@ def main():
                 iocs = extract_iocs(text)
                 print("Inserting")
                 insert_into_db(text, existing_minhashes, iocs, link)
+                successful_texts += 1
             else:
                 failed_texts += 1
         i += 1
@@ -65,16 +67,16 @@ def main():
         reports = get_orkl_report(offset=offset, limit=1)
         if reports is None:
             print(f"No more reports found at offset {offset}. Stopping.")
-            break  # Stop when ORKL API returns no data
+            break  # stop when ORKL API returns no data
         
         for report in reports:
             process_orkl_report(report, existing_minhashes)
 
-        offset += 1  # Increment the offset to fetch the next report
+        offset += 1  # fetch the next report
 
-    print(f"[!] Failed texts: {failed_texts}")
+    print(f"[!] Failed inserts: {failed_texts}")
 
-    print(f"[!] Failed texts: {failed_texts}")
+    print(f"[!] Successful inserts: {successful_texts}")
 
 if __name__ == "__main__":
     main()
