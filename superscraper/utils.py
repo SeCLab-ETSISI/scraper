@@ -177,9 +177,9 @@ def get_text_from_pdf(pdf_path: str) -> str:
 
     return text
 
-def extract_text_from_url(url: str) -> str:
+async def extract_text_from_url(url: str) -> str:
     """
-    Extract text and metadata from a URL.
+    Extract text and metadata from a URL asynchronously.
 
     :param url: URL of the website to extract text from.
     :return: Extracted text.
@@ -188,15 +188,17 @@ def extract_text_from_url(url: str) -> str:
         url = 'https://' + url
 
     try:
-        response = requests.get(url, headers=HEADERS, timeout=10)# , verify=False)  # Disable SSL verification
-        if response.status_code == 200:
-            doc = Document(response.text)
-            soup = BeautifulSoup(doc.summary(), 'html.parser')
-            text = soup.get_text(strip=True)
-            return text
-        else:
-            print(f"[-] Error fetching URL {url}: {response.status_code}")
-            return ""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=HEADERS, timeout=10) as response:
+                if response.status == 200:
+                    html = await response.text()
+                    doc = Document(html)
+                    soup = BeautifulSoup(doc.summary(), 'html.parser')
+                    text = soup.get_text(strip=True)
+                    return text
+                else:
+                    print(f"[-] Error fetching URL {url}: {response.status}")
+                    return ""
     except Exception as e:
         print(f"[-] Request error fetching URL {url}: {e}")
         return ""
