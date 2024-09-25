@@ -8,6 +8,7 @@ from datetime import datetime
 import hashlib
 import pdfplumber
 from datasketch import MinHash
+import aiohttp
 
 from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN, ORKL_API_URL
 from metadata import get_metadata
@@ -43,6 +44,25 @@ def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str], token
             response.raise_for_status()
     
     raise ValueError("[?] None of the specified branches were found in the repository.")
+
+
+async def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str], token: str) -> str:
+    if token is None:
+        raise ValueError("[!] GitHub token is None.")
+    
+    headers = {'Authorization': f'token {token}'}
+    
+    async with aiohttp.ClientSession() as session:
+        for branch in branches:
+            url = f"https://api.github.com/repos/{owner}/{repo}/branches/{branch}"
+            async with session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    return (await response.json())['commit']['sha'], branch
+                elif response.status in [401, 403, 404]:
+                    print(f"[-] Branch {branch} not found or access denied: {response.status}")
+                else:
+                    print(f"[-] Error fetching commit SHA for branch {branch}: {response.status} - {await response.text()}")
+
 
 def get_github_repo_tree(owner: str, repo: str, sha: str, token: str) -> List[dict]:
     """
