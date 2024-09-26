@@ -2,7 +2,7 @@ import os, re
 import requests
 from typing import List
 from pymongo import MongoClient
-from readability import Document
+from readability.readability import Document
 from bs4 import BeautifulSoup
 from datetime import datetime
 import hashlib
@@ -46,7 +46,7 @@ def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str], token
     raise ValueError("[?] None of the specified branches were found in the repository.")
 
 
-async def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str], token: str) -> str:
+async def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str], token: str) -> tuple:
     if token is None:
         raise ValueError("[!] GitHub token is None.")
     
@@ -62,6 +62,10 @@ async def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str],
                     print(f"[-] Branch {branch} not found or access denied: {response.status}")
                 else:
                     print(f"[-] Error fetching commit SHA for branch {branch}: {response.status} - {await response.text()}")
+    
+    # default value if no branches were found
+    return None, None
+
 
 
 def get_github_repo_tree(owner: str, repo: str, sha: str, token: str) -> List[dict]:
@@ -102,7 +106,7 @@ def download_file(url: str, local_path: str, token: str = None) -> None:
         print(f"[-] Error downloading file: {response.status_code} - {response.text}")
         response.raise_for_status()
 
-def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches: List[str], token: str = None) -> None:
+async def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches: List[str], token: str = None) -> None:
     """
     Extract all PDF files from a GitHub repository and save them locally.
 
@@ -123,8 +127,9 @@ def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches: List
     valid_branch = None
     for branch in branches:
         try:
-            sha, valid_branch = get_github_repo_commit_sha(owner, repo, [branch], token)
-            break  # Stop if a valid branch is found
+            sha, valid_branch = await get_github_repo_commit_sha(owner, repo, [branch], token)
+            if sha:  # Check if sha is valid
+                break  # Stop if a valid branch is found
         except ValueError as e:
             print(f"[-] Error finding branch '{branch}': {e}")
     

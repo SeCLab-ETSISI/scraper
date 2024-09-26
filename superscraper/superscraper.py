@@ -63,13 +63,13 @@ async def main():
     print("------ Processing ORKL reports ------")
     offset = 0
     while True:
-        reports = await get_orkl_report(offset=offset, limit=1)
+        reports = get_orkl_report(offset=offset, limit=1)
         if reports is None:
             print(f"No more reports found at offset {offset}. Stopping.")
             break
         
         for report in reports:
-            await process_orkl_report(report, existing_minhashes)
+            process_orkl_report(report, existing_minhashes)
 
         offset += 1
 
