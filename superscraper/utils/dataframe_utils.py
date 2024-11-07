@@ -1,24 +1,10 @@
-from concurrent.futures import ProcessPoolExecutor, as_completed, ThreadPoolExecutor
-from datetime import datetime
+from concurrent.futures import as_completed, ThreadPoolExecutor
 import os
 import pandas as pd
-import numpy as np
-import subprocess
-import collections
-import plotly.express as px
-from upsetplot import from_memberships, UpSet, plot
+from upsetplot import from_memberships, UpSet
 import matplotlib.pyplot as plt
-import requests
-from bs4 import BeautifulSoup
-import zipfile
-import struct
-import re
-import json
-import pickle
-import hashlib
 import warnings
 from matplotlib import cm
-from matplotlib.colors import ListedColormap
 
 from file_analysis_utils import get_all_file_types
 

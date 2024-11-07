@@ -6,10 +6,6 @@ import os
 from pathlib import Path
 import hashlib
 
-
-import pandas as pd
-import numpy as np
-
 def file_type_magika(file_path):
     """
     Identifies the file type using Magika.

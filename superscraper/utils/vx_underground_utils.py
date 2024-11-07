@@ -1,12 +1,13 @@
 from datetime import datetime
 import os
 import requests
-import hashlib
 import pandas as pd
 import re
 from bs4 import BeautifulSoup
 import py7zr
 from file_analysis_utils import get_all_file_types, compute_hashes
+import time
+import subprocess
 
 def download_file(url, local_filename):
     """
@@ -28,14 +29,27 @@ def download_file(url, local_filename):
 
 def extract_7z_file(file_path):
     """
-    Extracts a '.7z' file to its containing directory.
+    Extracts a '.7z' file to its containing directory. If there is an error, the '7z' command is used as a fallback.
 
     Args:
         file_path (str): The path of the '.7z' file.
     """
-    with py7zr.SevenZipFile(file_path, mode='r', password='infected') as archive:
-        archive.extractall(path=os.path.dirname(file_path))
-
+    output_dir = os.path.dirname(file_path)
+    try:
+        with py7zr.SevenZipFile(file_path, mode='r', password='infected') as archive:
+            archive.extractall(path=output_dir)
+    except Exception as e:
+        try:
+            # Run the 7z command with password support and output directory
+            subprocess.run(
+                ['7z', 'x', file_path, f'-o{output_dir}', '-p', 'infected'],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            print(f"After the Exception {e}, the extraction of {file_path} completed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"Double ERROR in extracting {file_path}: {e.stderr}")
 
 def extract_all_7z_files(path):
     """
@@ -60,47 +74,53 @@ def find_7z_files_and_generate_csv(folder_path, output_csv):
         output_csv (str): The output CSV file path.
     """
     file_data = []
-
+    data_to_study = []
     for root, _, files in os.walk(folder_path):
         for file in files:
             file_path = os.path.join(root, file)
-            if file.endswith('.7z') and "/Samples/" in file_path:
-                file_name = os.path.splitext(file)[0]
-                file_path_no_ext = os.path.splitext(file_path)[0]
-                path_parts = file_path_no_ext.split("vx_underground")[1].split(os.sep)
-                year, campaign = path_parts[1], path_parts[2]
+            # if file has no extension
+            if "/Samples/" in file_path:
+                if "." not in file:
+                    file_name = os.path.splitext(file)[0]
+                    file_path_no_ext = os.path.splitext(file_path)[0]
+                    path_parts = file_path_no_ext.split("vx_underground")[1].split(os.sep)
+                    year, campaign = path_parts[1], path_parts[2]
 
-                if os.path.isfile(file_path_no_ext):
-                    hashes = compute_hashes(file_path_no_ext)
-                    file_data.append({
-                        "file_name": file_name,
-                        "file_path": file_path_no_ext,
-                        "sha256": hashes[0],
-                        "md5": hashes[1],
-                        "sha1": hashes[2],
-                        "file_size": os.path.getsize(file_path_no_ext),
-                        "campaign": campaign,
-                        "year": year
-                    })
+                    if os.path.isfile(file_path_no_ext):
+                        hashes = compute_hashes(file_path_no_ext)
+                        file_data.append({
+                            "file_name": file_name,
+                            "file_path": file_path_no_ext,
+                            "sha256": hashes[0],
+                            "md5": hashes[1],
+                            "sha1": hashes[2],
+                            "file_size": os.path.getsize(file_path_no_ext),
+                            "campaign": campaign,
+                            "year": year
+                        })
 
-                elif os.path.isdir(file_path_no_ext):
-                    print(f"Processing the folder: {file_path_no_ext}")
-                    for inner_file in os.listdir(file_path_no_ext):
-                        if re.match(r'^[a-fA-F0-9]{64}$', inner_file):
-                            print(f"\tThe file is a hash and will be stored as a sample: {inner_file}")
-                            file_path_inner = os.path.join(file_path_no_ext, inner_file)
-                            hashes = compute_hashes(file_path_inner)
-                            file_data.append({
-                                "file_name": inner_file,
-                                "file_path": file_path_inner,
-                                "sha256": hashes[0],
-                                "md5": hashes[1],
-                                "sha1": hashes[2],
-                                "file_size": os.path.getsize(file_path_inner),
-                                "campaign": campaign,
-                                "year": year
-                            })
-
+                    elif os.path.isdir(file_path_no_ext):
+                        print(f"Processing the folder: {file_path_no_ext}")
+                        for inner_file in os.listdir(file_path_no_ext):
+                            if re.match(r'^[a-fA-F0-9]{64}$', inner_file):
+                                print(f"\tThe file is a hash and will be stored as a sample: {inner_file}")
+                                file_path_inner = os.path.join(file_path_no_ext, inner_file)
+                                hashes = compute_hashes(file_path_inner)
+                                file_data.append({
+                                    "file_name": inner_file,
+                                    "file_path": file_path_inner,
+                                    "sha256": hashes[0],
+                                    "md5": hashes[1],
+                                    "sha1": hashes[2],
+                                    "file_size": os.path.getsize(file_path_inner),
+                                    "campaign": campaign,
+                                    "year": year
+                                })
+                else:
+                    print(f"File {file_path} has an extension and must be studied")
+                    data_to_study.append(file_path)
+    # save the data to study in a pickle file
+    pd.DataFrame(data_to_study).to_pickle("./data_to_study.pkl")
     pd.DataFrame(file_data).to_csv(output_csv, index=False)
 
 
@@ -111,8 +131,8 @@ def download_vx_underground_archive():
     print("Starting to download vx_underground files...")
     directory = "./vx_underground"
     os.makedirs(directory, exist_ok=True)
-    base_url = "https://vx-underground.org/APTs"
-    scrape_all_years(base_url, download_archive=True)
+    archive_url = "https://vx-underground.org/APTs/Yearly%20Archives"
+    scrape_all_years(archive_url, download_archive=True) # almost 2h to download all the malware samples
     extract_all_7z_files(directory)
     find_7z_files_and_generate_csv(directory, f"./vx_underground.csv")
     print("Extraction of vx_underground completed.")
@@ -180,7 +200,7 @@ def scrape_file_info(samples_url, last_scrap):
                     })
     return file_info_list
 
-def scrape_campaign_samples(year_url, year, last_scrap):
+def scrape_campaign_samples(year_url, last_scrap):
     """
     Scrapes campaign data for a given year, retrieving file information from each campaign's "Samples" page.
 
@@ -205,7 +225,7 @@ def scrape_campaign_samples(year_url, year, last_scrap):
         campaign_files = scrape_file_info(samples_url, last_scrap)
         if campaign_files:
             campaigns[campaign_name] = campaign_files
-
+        #time.sleep(0.2)
     return campaigns
 
 
@@ -241,15 +261,15 @@ def scrape_all_years(base_url, download_archive=False):
                     if download_archive:
                         archive_path = f"./vx_underground/{year}.7z"
                         if not os.path.exists(archive_path):
-                            archive_url = f"https://samples.vx-underground.org/APTs/Yearly%20Archives/{year}.7z"
+                            archive_url = f"{base_url}/{year}.7z"
                             download_file(archive_url, archive_path)
                     else:
-                        all_data[year] = scrape_campaign_samples(year_url, year, last_scrap)
+                        all_data[year] = scrape_campaign_samples(year_url, last_scrap)
 
     return all_data
 
 
-def handle_file(file, year, campaign):
+def handle_new_file(file, year, campaign):
     """
     Downloads a file and computes its hash, returning relevant information.
 
@@ -263,25 +283,39 @@ def handle_file(file, year, campaign):
     """
     file_name = file['file_name']
     file_link = file['file_link']
-    directory = f"./vx_underground/{year}/{campaign}/Samples"
+    directory = f"./new_vx_underground/{year}/{campaign}/Samples"
     os.makedirs(directory, exist_ok=True)
     file_path = os.path.join(directory, file_name)
 
     download_file(file_link, file_path)
-    file_path_no_ext = os.path.splitext(file_path)[0]
-    hashes = compute_hashes(file_path_no_ext)
+    extract_7z_file(file_path)
+    file_name = file_name.split('.7z')[0]
+    file_path = file_path.split('.7z')[0]
+    hashes = compute_hashes(file_path)
 
     return {
         "file_name": file_name,
-        "file_path": file_path_no_ext,
+        "file_path": file_path,
         "sha256": hashes[0],
         "md5": hashes[1],
         "sha1": hashes[2],
-        "file_size": os.path.getsize(file_path_no_ext),
+        "file_size": os.path.getsize(file_path),
         "campaign": campaign,
         "year": year
     }
 
+def move_new_file_to_folder(file_path):
+    """
+    Moves a file to the appropriate folder based on its hash.
+
+    Args:
+        file_path (str): The path to the file to move.
+    """
+    path_parts = file_path.split("vx_underground")[1].split(os.sep)
+    year, campaign, file_name = path_parts[1], path_parts[2], path_parts[-1]
+    new_path = f"./vx_underground/{year}/{campaign}/Samples/{file_name}"
+    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+    os.rename(file_path, new_path)
 
 def update_vx_underground():
     """
@@ -294,53 +328,63 @@ def update_vx_underground():
     print("Original vx_underground shape:", vx_underground.shape)
     print("Original malware_df shape:", malware_df.shape)
 
-    all_data = scrape_all_years(base_url)
+    unseen_data = scrape_all_years(base_url)
     malware_df_modified = False
+    vx_underground_modified = False
 
-    for year, campaigns in all_data.items():
+    for year, campaigns in unseen_data.items():
         for campaign, files in campaigns.items():
             for file in files:
-                file_details = handle_file(file, year, campaign)
-                vx_underground = vx_underground.append(file_details, ignore_index=True)
+                file_details = handle_new_file(file, year, campaign)
+                if file_details['sha256'] not in vx_underground['sha256'].values: # double check (modify date and sha256) for avoiding duplicates
+                    # move the file to the right folder
+                    new_path = move_new_file_to_folder(file_details['file_path'])
+                    file_details['file_path'] = new_path
+                    vx_underground = vx_underground._append(file_details, ignore_index=True)
+                    vx_underground_modified = True
+                    if file_details['sha256'] not in malware_df['sha256'].values: # if the file is not already in malware_df by other source
+                        file_types = get_all_file_types(file_details['file_path'], file_details['sha256'])
+                        file_details.update({
+                            'source': 'vx_underground',
+                            'file_paths': [file_details['file_path']],
+                            'available': True,
+                            'file_type_magika': file_types[0],
+                            'file_type_libmagic': file_types[1],
+                            'file_type_exiftool': file_types[2],
+                            'virustotal_reports': None
+                        })
+                        malware_df = malware_df._append(file_details, ignore_index=True)
+                        malware_df_modified = True
+                    else: # if the file is already in malware_df by other source
+                        # update the file paths and source in malware_df
+                        idx = malware_df[malware_df['sha256'] == file_details['sha256']].index[0]
+                        current_file_paths = malware_df.at[idx, 'file_paths'] or ""  # Retrieve current value or initialize as empty string
+                        if file_details['file_path'] not in current_file_paths.split(", "):
+                            updated_file_paths = f"{current_file_paths}, {file_details['file_path']}".strip(", ")
+                            malware_df.at[idx, 'file_paths'] = updated_file_paths
 
-                if file_details['sha256'] not in malware_df['sha256'].values:
-                    malware_df_modified = True
-                    file_details.update({
-                        'source': 'vx_underground',
-                        'file_paths': [file_details['file_path']],
-                        'available': True
-                    })
-                    file_types = get_all_file_types(file_details['file_path'], file_details['sha256'])
-                    file_details.update({
-                        'file_type_magika': file_types[0],
-                        'file_type_libmagic': file_types[1],
-                        'file_type_exiftool': file_types[2],
-                        'virustotal_reports': None
-                    })
-                    malware_df = malware_df.append(file_details, ignore_index=True)
+                        # Update the 'source' column
+                        current_source = malware_df.at[idx, 'source'] or ""  # Retrieve current value or initialize as empty string
+                        if 'vx_underground' not in current_source.split(", "):
+                            updated_source = f"{current_source}, vx_underground".strip(", ")
+                            malware_df.at[idx, 'source'] = updated_source
+                        else:
+                            print(f"SOMETHING WERILD HAPPENED"*5)
+                            print(f"File {file_details['file_path']} already in malware_df with source 'vx_underground'")
+                        malware_df_modified = True
 
     print("Updated vx_underground shape:", vx_underground.shape)
     print("Updated malware_df shape:", malware_df.shape)
-
-    vx_underground.to_csv('./vx_underground.csv', index=False)
+    if vx_underground_modified:
+        vx_underground.to_csv('./vx_underground_after_update.csv', index=False)
     if malware_df_modified:
-        malware_df.to_pickle('./malware_df.pkl')
-
+        malware_df.to_pickle('./malware_df_after_update.pkl')
+    
     with open('./updater.log', 'a') as f:
         f.write(f"{datetime.now().strftime('%Y/%m/%d')}\n")
-    #vx_underground.to_csv('./vx_underground.csv', index=False)
 
-    #if malware_df_modified:
-    #    malware_df.to_pickle('./malware_df.pkl')
 
-    #vx_underground.drop_duplicates(subset=['sha256'], inplace=True)
-"""
-print(f"Scraping started at {datetime.now()}")
-all_data = scrape_all_years(BASE_URL)
-with open('all_data.pkl', 'wb') as f:
-    pickle.dump(all_data, f)
-print(f"Scraping completed at {datetime.now()}")
-"""
 if __name__ == "__main__":
-    download_vx_underground_archive()
-    update_vx_underground()
+    #download_vx_underground_archive()
+    #update_vx_underground()
+    find_7z_files_and_generate_csv("./vx_underground", f"./vx_underground.csv")

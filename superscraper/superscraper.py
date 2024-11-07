@@ -22,12 +22,11 @@ from globals import GH_TOKEN
 from datasketch import MinHash
 import os
 
-from malware_process import (
+from utils.dataframe_utils import (
     load_all_datasets,
     handle_duplicates,
-    generate_venn_diagram,
     add_filetype,
-    plot_venn
+    generate_venn_diagram
 )
 
 def is_github_url(url):
@@ -115,7 +114,7 @@ def download_malware():
     download_vx_underground_archive() # Download VX Underground archive and creates a CSV file with the malware information.
     print("------ Download completed ------")
 
-def process_malware():
+def process_malware(plot_venn=True):
     """
     Merge all the datasets of malware, filter duplicates and process the binaries to obtain the file type.
     """
