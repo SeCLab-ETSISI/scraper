@@ -3,7 +3,7 @@ import asyncio
 import requests
 import zipfile
 import io
-from utils import (
+from utils.utils import (
     extract_pdfs_from_repo,
     extract_text_from_url,
     getMinHashFromFullText,
