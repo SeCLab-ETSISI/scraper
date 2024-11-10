@@ -133,7 +133,7 @@ def process_malware(plot_venn=True):
 
 def update_malware():
     """
-    Update the malware datasets by downloading the last version of VX Underground.
+    Update the malware datasets by downloading their last version (at the current version only VX Underground).
     """
     print("------ Updating malware ------")
     update_vx_underground()

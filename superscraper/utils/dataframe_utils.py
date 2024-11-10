@@ -1,3 +1,4 @@
+import logging
 from concurrent.futures import as_completed, ThreadPoolExecutor
 import os
 import pandas as pd
@@ -7,6 +8,10 @@ import warnings
 from matplotlib import cm
 
 from file_analysis_utils import get_all_file_types
+
+# Configure logging
+logging.basicConfig(filename='malware_analysis.log', level=logging.INFO, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 def index_files(folder_path):
     """
@@ -145,10 +150,10 @@ def load_all_datasets(base_path='.'):
         file_path = os.path.join(base_path, f"{info['csv_name']}.csv")
         delimiter = info.get('delimiter', ',')
         df = pd.read_csv(file_path, delimiter=delimiter)
-        print(f"Loading {df_name}...")
+        logging.info(f"Loading {df_name}...")
 
         if df[info['sha256_column']].isnull().sum() > 0:
-            print(f"\tFound null SHA-256 values: {df[info['sha256_column']].isnull().sum()} entries")
+            logging.warning(f"\tFound null SHA-256 values: {df[info['sha256_column']].isnull().sum()} entries")
 
         if "ADAPTDataset" in df_name:
             not_apt_bins = df[df["Normalized_Tag"] == "NotAPT"]["sha256"].values
@@ -172,7 +177,7 @@ def load_all_datasets(base_path='.'):
         )
 
         df_malware_list.append(gen_df)
-        print(f"\tLoaded {len(gen_df)} entries; {gen_df['file_path'].isnull().sum()} files missing")
+        logging.info(f"\tLoaded {len(gen_df)} entries; {gen_df['file_path'].isnull().sum()} files missing")
 
     df_malware = pd.concat(df_malware_list, ignore_index=True).dropna(subset=['sha256'])
     return df_malware
@@ -218,13 +223,13 @@ def parallel_process_dataframe(df, max_workers=15):
                 index, magika_type, libmagic_type, exiftool_type = future.result()
                 results.append((index, magika_type, libmagic_type, exiftool_type))
                 
-                # Track and print progress every 1000 rows processed
+                # Track and log progress every 1000 rows processed
                 progress_counter += 1
                 if progress_counter % 1000 == 0:
-                    print(f"Processed {progress_counter} rows")
+                    logging.info(f"Processed {progress_counter} rows")
                     
             except Exception as e:
-                print(f"Error processing row {futures[future]}: {e}")
+                logging.error(f"Error processing row {futures[future]}: {e}")
     
     return results
 
@@ -246,10 +251,10 @@ def process_dataframe(df):
         else:
             results.append((index, None, None, None))
         
-        # Print progress every 1000 rows
+        # Log progress every 1000 rows
         progress_counter += 1
         if progress_counter % 1000 == 0:
-            print(f"Processed {progress_counter} rows")
+            logging.info(f"Processed {progress_counter} rows")
         
     return results
 
@@ -319,14 +324,14 @@ def process_binaries(plot_venn=True):
     # Update file paths and add availability status
     df_malware['file_path'] = df_malware['file_path'].replace('', None)
     df_malware['file_paths'] = df_malware['file_paths'].replace('', None)
-    print(f"Final DataFrame contains {len(df_malware)} unique samples but there are {df_malware['file_path'].isnull().sum()} missing files")
+    logging.info(f"Final DataFrame contains {len(df_malware)} unique samples but there are {df_malware['file_path'].isnull().sum()} missing files")
     df_malware['available'] = df_malware['file_path'].notnull()
     
-    # Print summary of binary availability
-    print("="*100)
-    print("We only have access to the following binaries:\n", df_malware["available"].value_counts())
-    print("="*40)
-    print("Of those we do not have access, they come from:\n", df_malware[df_malware["available"] == False]["source"].value_counts())
+    # Log summary of binary availability
+    logging.info("="*100)
+    logging.info("We only have access to the following binaries:\n%s", df_malware["available"].value_counts())
+    logging.info("="*40)
+    logging.info("Of those we do not have access, they come from:\n%s", df_malware[df_malware["available"] == False]["source"].value_counts())
 
     # Optional Venn diagram generation
     if plot_venn:
