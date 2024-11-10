@@ -154,8 +154,8 @@ def main():
     if not os.path.exists("./malware_df.pkl"): # check if the base content is already downloaded
         download_malware()
         process_malware()
-    else:
-        update_malware()
+
+    update_malware() # always update malware
 
     if not os.path.exists("./synonyms.pkl"):
         download_synonyms()
