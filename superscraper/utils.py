@@ -253,7 +253,7 @@ def extract_iocs(text):
     return iocs
 
 
-def is_duplicate(new_minhash, existing_minhashes, threshold=0.2):
+def is_duplicate(new_minhash, existing_minhashes, threshold=0.3):
     """
     Checks if a given MinHash is similar to any MinHash in the existing database.
 
