@@ -21,6 +21,7 @@ from urllib.parse import urlparse
 from globals import GH_TOKEN
 from datasketch import MinHash
 import os
+from datetime import datetime
 
 from utils.dataframe_utils import (
     load_all_datasets,
@@ -128,6 +129,7 @@ def process_malware(plot_venn=True):
         generate_venn_diagram(df_malware)
 
     df_malware = add_filetype(df_malware)
+    df_malware["date_added"] = datetime.now().strftime("%Y/%m/%d")
     df_malware.to_pickle("malware_df.pkl")
     print('------ Malware processing completed ------')
 

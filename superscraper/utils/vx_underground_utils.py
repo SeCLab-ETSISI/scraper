@@ -6,11 +6,21 @@ import re
 from bs4 import BeautifulSoup
 import py7zr
 from file_analysis_utils import get_all_file_types, compute_hashes
+from utils import load_last_scrap_time
 import time
 import subprocess
 import logging
 import pickle
 from tqdm import tqdm
+from pymongo import MongoClient
+
+from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN, ORKL_API_URL
+from metadata import get_metadata
+
+client = MongoClient(MONGO_CONNECTION_STRING)
+db = client[MONGO_DATABASE]
+collection = db[MONGO_COLLECTION]
+SCRAP_TIME = datetime.now().strftime("%Y/%m/%d")
 
 logging.basicConfig(filename='vx_underground.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s', filemode='w')
@@ -143,7 +153,8 @@ def get_file_details_vx_underground(file_path):
         "sha1": hashes[2],
         "file_size": os.path.getsize(file_path),
         "campaign": campaign,
-        "year": year
+        "year": year,
+        "date_added": SCRAP_TIME
     }
 
 def is_compressed_file(file_path):
@@ -397,52 +408,6 @@ def move_new_file_vx_folder(file_path):
 
 def insert_new_file_in_malware_df(file_details):
     """
-    Gathers information about a new file and inserts it into the malware DataFrame.
-
-    Args:
-        file_details (dict): The details of the new file.
-    
-    Returns:
-        pd.Series: The new row to insert into the malware DataFrame.
-    """
-    file_types = get_all_file_types(file_details['file_path'], file_details['sha256'])
-    file_details.update({
-        'source': 'vx_underground',
-        'file_paths': [file_details['file_path']],
-        'available': True,
-        'file_type_magika': file_types[0],
-        'file_type_libmagic': file_types[1],
-        'file_type_exiftool': file_types[2],
-        'virustotal_reports': None
-    })
-    return file_details
-
-def add_extra_information_malware_df(file_details, malware_df):
-    """
-    Adds extra information to an existing file in the malware DataFrame.
-
-    Args:
-        file_details (dict): The details of the file to update.
-        malware_df (pd.DataFrame): The DataFrame containing malware information.
-    """
-    # update the "file_paths" column in malware_df
-    idx = malware_df[malware_df['sha256'] == file_details['sha256']].index[0]
-    current_file_paths = malware_df.at[idx, 'file_paths'] or ""
-    file_paths = set(current_file_paths.split(", "))
-    file_paths.add(file_details['file_path'])
-    malware_df.at[idx, 'file_paths'] = ", ".join(sorted(file_paths))
-
-    current_sources = malware_df.at[idx, 'source'] or ""
-    sources = set(current_sources.split(", "))
-    sources.add("vx_underground")
-    malware_df.at[idx, 'source'] = ", ".join(sorted(sources))
-
-    # Update the 'available' column in malware_df
-    malware_df.at[idx, 'available'] = True
-    new_row = malware_df.loc[idx].copy()
-    return idx, new_row
-def insert_new_file_in_malware_df(file_details):
-    """
     Prepares a new row for the malware DataFrame by adding relevant fields.
 
     Args:
@@ -459,7 +424,8 @@ def insert_new_file_in_malware_df(file_details):
         'file_type_magika': file_types[0],
         'file_type_libmagic': file_types[1],
         'file_type_exiftool': file_types[2],
-        'virustotal_reports': None
+        'virustotal_reports': None,
+        'date_added': SCRAP_TIME
     })
     return file_details
 
@@ -490,6 +456,16 @@ def add_extra_information_malware_df(file_details, updated_row):
     updated_row['available'] = True
 
     return updated_row
+
+def update_mongo_collection(file_details, collection):
+    """
+    Updates a MongoDB collection with new file details.
+
+    Args:
+        file_details (dict): The details of the new file.
+        collection (pymongo.collection.Collection): The collection to update.
+    """
+    collection.insert_one(file_details)
 
 def update_vx_underground(base_url="https://vx-underground.org/APTs"):
     """
@@ -535,8 +511,8 @@ def update_vx_underground(base_url="https://vx-underground.org/APTs"):
         logging.info(f"Added {len(new_malware_rows)} new rows to malware_df.")
     if new_vx_rows:
         vx_underground = pd.concat([vx_underground, pd.DataFrame(new_vx_rows)], ignore_index=True)
-        vx_underground.to_csv('./vx_underground_after_update.csv', index=False)
-        malware_df.to_pickle('./malware_df_after_update.pkl')
+        vx_underground.to_csv('./vx_underground.csv', index=False)
+        malware_df.to_pickle('./malware_df.pkl')
         logging.info(f"Added {len(new_vx_rows)} new rows to vx_underground.")
     
     with open('./updater.log', 'a') as f:
