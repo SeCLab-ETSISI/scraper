@@ -4,14 +4,12 @@ from typing import List
 from pymongo import MongoClient
 from readability.readability import Document
 from bs4 import BeautifulSoup
-from datetime import datetime
-import hashlib
 import pdfplumber
 from datasketch import MinHash
 import aiohttp
 
-from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN, ORKL_API_URL
-from metadata import get_metadata
+from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN, ORKL_API_URL, SCRAPING_TIME
+
 
 client = MongoClient(MONGO_CONNECTION_STRING)
 db = client[MONGO_DATABASE]
@@ -297,7 +295,7 @@ def insert_into_db(text, minhash, iocs, link):
         "hashes": iocs['hashes'],
         "ip_addrs": iocs['ip_addrs'],
         "domains": iocs['domains'],
-        "date_added": datetime.utcnow(),
+        "date_added": SCRAPING_TIME,
         "url": link
     }
     print("[+] Inserting...")
