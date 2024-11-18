@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv(".env")
 
@@ -23,3 +24,4 @@ if GH_TOKEN is None:
     raise ValueError("[-] GitHub token (GH_TOKEN) not found in .env")
 
 ORKL_API_URL = 'https://orkl.eu/api/v1/library/entries'
+SCRAPING_TIME = datetime.now().strftime("%Y/%m/%d")
