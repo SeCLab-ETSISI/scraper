@@ -7,6 +7,14 @@ import importlib
 import asyncio
 import time
 
+script_dir = os.path.dirname(__file__)
+parent_dir = os.path.abspath(os.path.join(script_dir, os.pardir))
+superscraper_dir = os.path.join(parent_dir, 'superscraper')
+sys.path.append(superscraper_dir)
+
+from globals import SCRAPING_TIME
+
+print(f"SCRAPING_TIME: {SCRAPING_TIME}")
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # python path fixes
@@ -52,7 +60,7 @@ async def append_to_csv(links: List[str], csv_path: str, lock: asyncio.Lock) -> 
         
         if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
             # create a new CSV file if it doesn't exist
-            df = pd.DataFrame(links, columns=['link'])
+            df = pd.DataFrame({'link': links, 'date': [SCRAPING_TIME] * len(links)})
             df.to_csv(csv_path, index=False)
             logging.debug(f"Created new CSV file with links")
         else:
@@ -60,12 +68,12 @@ async def append_to_csv(links: List[str], csv_path: str, lock: asyncio.Lock) -> 
                 existing_links = pd.read_csv(csv_path)
                 all_links = existing_links['link'].tolist() + links
                 unique_links, num_duplicates = remove_duplicates(all_links)
-                df = pd.DataFrame(unique_links, columns=['link'])
+                df = pd.DataFrame({'link': unique_links, 'date': [SCRAPING_TIME] * len(unique_links)})
                 df.to_csv(csv_path, index=False)
                 logging.debug(f"Appended links to existing CSV file, {num_duplicates} duplicates removed in total")
             except pd.errors.EmptyDataError:
                 # in case the CSV file exists but is empty
-                df = pd.DataFrame(links, columns=['link'])
+                df = pd.DataFrame({'link': links, 'date': [SCRAPING_TIME] * len(links)})
                 df.to_csv(csv_path, index=False)
                 logging.debug(f"CSV file was empty. Created new CSV file with links")
 
