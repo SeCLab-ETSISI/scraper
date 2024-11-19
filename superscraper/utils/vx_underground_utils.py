@@ -7,16 +7,13 @@ from bs4 import BeautifulSoup
 import py7zr
 from file_analysis_utils import get_all_file_types, compute_hashes
 from dataframe_utils import update_mongo_collection, insert_dict_to_mongo
-from utils import SCRAPING_TIME
 import time
 import subprocess
 import logging
 import pickle
 from tqdm import tqdm
-from pymongo import MongoClient
 
-from globals import SCRAPING_TIME, MONGO_MALWARE_COLLECTION
-from metadata import get_metadata
+from globals import SCRAPING_TIME
 
 logging.basicConfig(filename='vx_underground.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s', filemode='w')
@@ -446,7 +443,7 @@ def add_extra_information_malware_df(file_details, updated_row):
 
     return updated_row
 
-def update_vx_underground(base_url="https://vx-underground.org/APTs"):
+def update_vx_underground(collection, base_url="https://vx-underground.org/APTs"):
     """
     Updates the vx_underground dataset by scraping new files and adding them to the existing dataset.
 
@@ -484,7 +481,7 @@ def update_vx_underground(base_url="https://vx-underground.org/APTs"):
                                         updated_row = add_extra_information_malware_df(file_details, malware_df.loc[idx].copy())
                                         malware_df.loc[idx] = updated_row
                                         try:
-                                            update_mongo_collection(updated_row.to_dict(), MONGO_MALWARE_COLLECTION)
+                                            update_mongo_collection(updated_row.to_dict(), collection)
                                         except Exception as e:
                                             print(f"Failed to update row when updating vx underground. Row at index {idx}. Exception {e}")
                         pbar.update(1)
@@ -494,7 +491,7 @@ def update_vx_underground(base_url="https://vx-underground.org/APTs"):
         logging.info(f"Added {len(new_malware_rows)} new rows to malware_df.")
         for new_row in new_malware_rows:
             try:
-                insert_dict_to_mongo(new_row, MONGO_MALWARE_COLLECTION)
+                insert_dict_to_mongo(new_row, collection)
             except Exception as e:
                 print(f"Failed to insert row when updating vx underground. Row at index {idx}. Exception {e}")
     if new_vx_rows:

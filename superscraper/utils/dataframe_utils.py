@@ -8,48 +8,33 @@ import warnings
 from matplotlib import cm
 
 from file_analysis_utils import get_all_file_types
-from pymongo import MongoClient
-from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN, ORKL_API_URL
-
 
 # Configure logging
 logging.basicConfig(filename='malware_analysis.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
-def insert_dict_to_mongo(data, collection_name):
+def insert_dict_to_mongo(data, collection):
     """
     Inserts a dictionary into a MongoDB collection.
 
     Args:
-        data (dict): The dictionary to insert.
-        db_name (str): The name of the database.
-        collection_name (str): The name of the collection.
-        mongo_uri (str): The MongoDB URI.
-    
-        
-    Returns:
-        int: The number of documents inserted.
+        data (dict): The data to insert into the collection.
+        collection (pymongo.collection.Collection): The MongoDB collection to insert into.
     
     """
-    client = MongoClient(MONGO_CONNECTION_STRING)
-    db = client[MONGO_DATABASE]
-    collection = db[collection_name]
-    
     # Insert records into the collection
     result = collection.insert_one(data)
     
     return len(result.inserted_id)
 
-def update_mongo_collection(file_details, collection_name):
+def update_mongo_collection(file_details, collection):
     """
     Updates a MongoDB collection with new file details or modifies existing ones.
 
     Args:
-        file_details (dict): The details of the new file.
+        file_details (dict): The file details to update or insert.
+        collection (pymongo.collection.Collection): The MongoDB collection to update
     """
-    client = MongoClient(MONGO_CONNECTION_STRING)
-    db = client[MONGO_DATABASE]
-    collection = db[collection_name]
     
     sha256 = file_details['sha256']
     existing_entry = collection.find_one({"sha256": sha256})

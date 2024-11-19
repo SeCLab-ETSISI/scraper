@@ -4,10 +4,9 @@ import requests
 import zipfile
 import io
 from urllib.parse import urlparse
-from globals import GH_TOKEN
 from datasketch import MinHash
 import os
-from datetime import datetime
+from pymongo import MongoClient
 from utils.utils import (
     extract_pdfs_from_repo,
     extract_text_from_url,
@@ -33,7 +32,7 @@ from utils.dataframe_utils import (
     generate_venn_diagram,
     insert_dict_to_mongo
 )
-from globals import SCRAPING_TIME, MONGO_MALWARE_COLLECTION
+from globals import SCRAPING_TIME, GH_TOKEN, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_MALWARE_COLLECTION
 
 def is_github_url(url):
     """
@@ -136,11 +135,19 @@ def process_malware(plot_venn=True):
     malware_df = add_filetype(malware_df)
     malware_df["date_added"] = SCRAPING_TIME
     malware_df.to_pickle("malware_df.pkl")
-    for idx, row in malware_df.iterrows():
-        try:
-            insert_dict_to_mongo(row.to_dict(), MONGO_MALWARE_COLLECTION)
-        except Exception as e:
-            print(f"Failed to insert row at main when processing malware. Row at index {idx}. Exception {e}")
+
+    client = MongoClient(MONGO_CONNECTION_STRING)
+    try:
+        db = client[MONGO_DATABASE]
+        collection = db[MONGO_MALWARE_COLLECTION]
+        for idx, row in malware_df.iterrows():
+            try:
+                insert_dict_to_mongo(row.to_dict(), collection)
+            except Exception as e:
+                print(f"Failed to insert row at main when processing malware. Row at index {idx}. Exception {e}")
+    finally:
+        client.close()
+
 
     print('------ Malware processing completed ------')
 
@@ -151,8 +158,14 @@ def update_malware():
     Update the malware datasets by downloading their last version (at the current version only VX Underground).
     """
     print("------ Updating malware ------")
-    update_vx_underground()
-    print("------ Update completed ------")
+    client = MongoClient(MONGO_CONNECTION_STRING)
+    try:
+        db = client[MONGO_DATABASE]
+        collection = db[MONGO_MALWARE_COLLECTION]
+        update_vx_underground(collection)
+    finally:
+        client.close()
+        print("------ Update completed ------")
 
 def download_synonyms():
     """
