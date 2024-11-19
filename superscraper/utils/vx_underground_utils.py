@@ -410,7 +410,7 @@ def insert_new_file_in_malware_df(file_details):
         'file_type_magika': file_types[0],
         'file_type_libmagic': file_types[1],
         'file_type_exiftool': file_types[2],
-        'virustotal_reports': None,
+        'virustotal_report_path': None,
         'date_added': SCRAPING_TIME
     })
     return file_details
@@ -505,7 +505,7 @@ def update_vx_underground(collection, base_url="https://vx-underground.org/APTs"
 
     logging.info(f"Updated vx_underground shape: {vx_underground.shape}")
     logging.info(f"Updated malware_df shape: {malware_df.shape}")
-
+    return malware_df
 
 """
 #Delete when everything is tested

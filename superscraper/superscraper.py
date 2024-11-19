@@ -6,6 +6,7 @@ import io
 from urllib.parse import urlparse
 from datasketch import MinHash
 import os
+import json
 from pymongo import MongoClient
 from utils.utils import (
     extract_pdfs_from_repo,
@@ -32,7 +33,7 @@ from utils.dataframe_utils import (
     generate_venn_diagram,
     insert_dict_to_mongo
 )
-from globals import SCRAPING_TIME, GH_TOKEN, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_MALWARE_COLLECTION
+from globals import SCRAPING_TIME, GH_TOKEN, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_MALWARE_COLLECTION, VIRUSTOTAL_API_KEY, PATH_VT_REPORTS, MONGO_VIRUSTOTAL_COLLECTION
 
 def is_github_url(url):
     """
@@ -134,6 +135,7 @@ def process_malware(plot_venn=True):
 
     malware_df = add_filetype(malware_df)
     malware_df["date_added"] = SCRAPING_TIME
+
     malware_df.to_pickle("malware_df.pkl")
 
     client = MongoClient(MONGO_CONNECTION_STRING)
@@ -151,21 +153,91 @@ def process_malware(plot_venn=True):
 
     print('------ Malware processing completed ------')
 
+def get_virustotal_report(sha256):
+    """
+    Get the VirusTotal report for a given file hash (SHA-256).
+
+    :param api_key: VirusTotal API key.
+    :param sha256: SHA-256 hash of the file.
+    :return: JSON response from VirusTotal API.
+    """
+    url = f"https://www.virustotal.com/api/v3/files/{sha256}"
+    headers = {
+        "x-apikey": VIRUSTOTAL_API_KEY
+    }
+    response = requests.get(url, headers=headers)
+    
+    if response.status_code == 200:
+        # Save the report to a JSON file
+        with open(f"./virustotal_reports/{sha256}.json", 'w') as file:
+            json.dump(response.json(), file)
+        return True
+    else:
+        print(f"Failed to get report for {sha256}. Status code: {response.status_code}")
+        return None
+
+def insert_vt_report_to_mongo(report_path, collection):
+    """
+    Insert the VirusTotal reports to the MongoDB collection.
+
+    Args:
+        report_path (str): Path to the VirusTotal report.
+        collection (pymongo.collection.Collection): Collection to insert the reports.
+    
+    """
+    with open(report_path, 'r') as file:
+        report = json.load(file)
+    collection.insert_one(report)
+
+def update_virustotal_reports(malware_df):
+    """
+    Update the VirusTotal reports by downloading the latest version of the reports.
+    """
+    client = MongoClient(MONGO_CONNECTION_STRING)
+    try:
+        db = client[MONGO_DATABASE]
+        collection = db[MONGO_VIRUSTOTAL_COLLECTION]
+        for idx, row in malware_df.iterrows():
+            if not row["virustotal_report_path"]:
+                vt_report = get_virustotal_report(row["sha256"])
+                if vt_report:
+                    row["virustotal_report_path"] = f"{PATH_VT_REPORTS}/{row['sha256']}.json"
+                    insert_vt_report_to_mongo(row["virustotal_report_path"], collection)
+    finally:
+        client.close()
 
 
 def update_malware():
     """
-    Update the malware datasets by downloading their last version (at the current version only VX Underground).
+    Update the malware datasets by downloading their last version (at the current version only VX Underground). 
     """
     print("------ Updating malware ------")
     client = MongoClient(MONGO_CONNECTION_STRING)
     try:
         db = client[MONGO_DATABASE]
         collection = db[MONGO_MALWARE_COLLECTION]
-        update_vx_underground(collection)
+        malware_df = update_vx_underground(collection)
     finally:
         client.close()
-        print("------ Update completed ------")
+
+    update_virustotal_reports(malware_df)
+
+def insert_virustotal_reports():
+    """
+    Upload all the JSON files contained under their path to a new MongoDB collection.
+    
+    """
+    client = MongoClient(MONGO_CONNECTION_STRING)
+    try:
+        db = client[MONGO_DATABASE]
+        collection = db["virustotal_reports"]
+        
+        for filename in os.listdir(PATH_VT_REPORTS):
+            if filename.endswith(".json"):
+                insert_vt_report_to_mongo(f"{PATH_VT_REPORTS}/{filename}", collection)
+    finally:
+        client.close()
+        print("------ Upload completed ------")
 
 def download_synonyms():
     """
@@ -191,6 +263,7 @@ def main():
     if not os.path.exists("./malware_df.pkl"): # check if the base content is already downloaded
         download_malware()
         process_malware()
+        insert_virustotal_reports()
 
     update_malware() # always update malware
 

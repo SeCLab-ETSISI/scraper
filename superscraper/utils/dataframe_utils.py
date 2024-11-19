@@ -83,7 +83,7 @@ def find_file_paths(dataframe, folder_path, field='sha256'):
     return dataframe
 
 
-def find_virustotal_reports(dataframe, folder_path, field='sha256'):
+def find_virustotal_report_path(dataframe, folder_path, field='sha256'):
     """
     Adds paths to VirusTotal report files for each entry in the DataFrame based on an indexed folder.
 
@@ -93,10 +93,10 @@ def find_virustotal_reports(dataframe, folder_path, field='sha256'):
         field (str): The column name in the DataFrame that contains the identifiers for the reports.
 
     Returns:
-        pd.DataFrame: The modified DataFrame with an additional 'virustotal_reports' column.
+        pd.DataFrame: The modified DataFrame with an additional 'virustotal_report_path' column.
     """
     file_index = index_files(folder_path)
-    dataframe['virustotal_reports'] = dataframe[field].apply(lambda sha: file_index.get(f"{sha}.json"))
+    dataframe['virustotal_report_path'] = dataframe[field].apply(lambda sha: file_index.get(f"{sha}.json"))
     return dataframe
 
 
@@ -122,7 +122,7 @@ def generate_df(df, csv_name, sha256_column, filesize_column, apt_group_column, 
         "sha256": df[sha256_column],
         "file_path": df["file_path"],
         "file_paths": df["file_path"],
-        "virustotal_reports": df["virustotal_reports"] if "virustotal_reports" in df.columns else None,
+        "virustotal_report_path": df["virustotal_report_path"] if "virustotal_report_path" in df.columns else None,
         "md5": df["md5"] if "md5" in df.columns else None,
         "sha1": df["sha1"] if "sha1" in df.columns else None,
         "file_size": df[filesize_column] if filesize_column else None,
@@ -147,7 +147,7 @@ def handle_duplicates(df):
         'csv_name': lambda x: ', '.join(str(v) for v in x.unique() if v is not None),
         'file_paths': lambda x: ', '.join(str(v) for v in x if v is not None),
         'file_path': 'first',
-        'virustotal_reports': 'first',
+        'virustotal_report_path': 'first',
         'md5': 'first',
         'sha1': 'first',
         'file_size': lambda x: next((v for v in x if v is not None), None),
@@ -196,7 +196,7 @@ def load_all_datasets(base_path='.'):
             df = df[~df["sha256"].isin(not_apt_bins)]
         
         if "apt_class" in df_name:
-            df = find_virustotal_reports(df, "./virustotal_reports", info['sha256_column'])
+            df = find_virustotal_report_path(df, "./virustotal_report_path", info['sha256_column'])
 
         if "vx_underground" not in df_name:
             df = find_file_paths(df, f"./{info['csv_name']}", info['sha256_column'])
