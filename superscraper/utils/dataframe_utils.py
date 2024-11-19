@@ -8,11 +8,61 @@ import warnings
 from matplotlib import cm
 
 from file_analysis_utils import get_all_file_types
+from pymongo import MongoClient
+from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN, ORKL_API_URL
+
 
 # Configure logging
 logging.basicConfig(filename='malware_analysis.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
+def insert_dict_to_mongo(data, db_name, collection_name, mongo_uri=MONGO_CONNECTION_STRING):
+    """
+    Inserts a dictionary into a MongoDB collection.
+
+    Args:
+        data (dict): The dictionary to insert.
+        db_name (str): The name of the database.
+        collection_name (str): The name of the collection.
+        mongo_uri (str): The MongoDB URI.
+    
+        
+    Returns:
+        int: The number of documents inserted.
+    
+    """
+    client = MongoClient(mongo_uri)
+    db = client[db_name]
+    collection = db[collection_name]
+    
+    # Insert records into the collection
+    result = collection.insert_one(data)
+    
+    return len(result.inserted_id)
+
+def update_mongo_collection(file_details):
+    """
+    Updates a MongoDB collection with new file details or modifies existing ones.
+
+    Args:
+        file_details (dict): The details of the new file.
+    """
+    client = MongoClient('mongodb://localhost:27017/')
+    db = client['your_database_name']
+    collection = db['your_collection_name']
+    
+    sha256 = file_details['sha256']
+    existing_entry = collection.find_one({"sha256": sha256})
+
+    if existing_entry:
+        # Update the existing entry with new details
+        collection.update_one(
+            {"sha256": sha256},
+            {"$set": file_details}
+        )
+    else:
+        # Insert a new entry if it doesn't exist
+        collection.insert_one(file_details)
 def index_files(folder_path):
     """
     Indexes files in a given folder and maps filenames to their full paths.

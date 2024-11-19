@@ -6,6 +6,7 @@ import re
 from bs4 import BeautifulSoup
 import py7zr
 from file_analysis_utils import get_all_file_types, compute_hashes
+from dataframe_utils import update_mongo_collection
 from utils import load_last_scrap_time
 import time
 import subprocess
@@ -14,23 +15,23 @@ import pickle
 from tqdm import tqdm
 from pymongo import MongoClient
 
-from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN, ORKL_API_URL
+from globals import SCRAP_TIME
 from metadata import get_metadata
 
-client = MongoClient(MONGO_CONNECTION_STRING)
-db = client[MONGO_DATABASE]
-collection = db[MONGO_COLLECTION]
-SCRAP_TIME = datetime.now().strftime("%Y/%m/%d")
+
+#SCRAP_TIME = datetime.now().strftime("%Y/%m/%d")
 
 logging.basicConfig(filename='vx_underground.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s', filemode='w')
 
 def load_last_scrap_time():
-    """Loads the last scraping time from the updater log."""
+    """Loads the last scraping time from the updater log.
     with open('./updater.log', 'r') as f:
         lines = f.readlines()
         last_line = lines[-1]
     return datetime.strptime(last_line.strip(), "%Y/%m/%d")
+    """
+    return SCRAP_TIME
 
 def request_with_retry(url, max_retries=3):
     """
@@ -457,16 +458,6 @@ def add_extra_information_malware_df(file_details, updated_row):
 
     return updated_row
 
-def update_mongo_collection(file_details, collection):
-    """
-    Updates a MongoDB collection with new file details.
-
-    Args:
-        file_details (dict): The details of the new file.
-        collection (pymongo.collection.Collection): The collection to update.
-    """
-    collection.insert_one(file_details)
-
 def update_vx_underground(base_url="https://vx-underground.org/APTs"):
     """
     Updates the vx_underground dataset by scraping new files and adding them to the existing dataset.
@@ -501,14 +492,18 @@ def update_vx_underground(base_url="https://vx-underground.org/APTs"):
                                         new_row = insert_new_file_in_malware_df(file_details)
                                         new_malware_rows.append(new_row)
                                     else: # if the file is already in malware_df by other source
+
                                         idx = malware_df[malware_df['sha256'] == file_details['sha256']].index[0]
                                         updated_row = add_extra_information_malware_df(file_details, malware_df.loc[idx].copy())
                                         malware_df.loc[idx] = updated_row
+                                        update_mongo_collection(updated_row.to_dict(), collection)
                         pbar.update(1)
 
     if new_malware_rows:
         malware_df = pd.concat([malware_df, pd.DataFrame(new_malware_rows)], ignore_index=True)
         logging.info(f"Added {len(new_malware_rows)} new rows to malware_df.")
+        for new_row in new_malware_rows:
+            update_mongo_collection(new_row, collection)
     if new_vx_rows:
         vx_underground = pd.concat([vx_underground, pd.DataFrame(new_vx_rows)], ignore_index=True)
         vx_underground.to_csv('./vx_underground.csv', index=False)

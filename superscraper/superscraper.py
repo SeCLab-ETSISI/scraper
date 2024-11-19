@@ -3,6 +3,11 @@ import asyncio
 import requests
 import zipfile
 import io
+from urllib.parse import urlparse
+from globals import GH_TOKEN
+from datasketch import MinHash
+import os
+from datetime import datetime
 from utils.utils import (
     extract_pdfs_from_repo,
     extract_text_from_url,
@@ -17,17 +22,17 @@ from utils.utils import (
     download_vx_underground_archive,
     update_vx_underground
 )
-from urllib.parse import urlparse
-from globals import GH_TOKEN
-from datasketch import MinHash
-import os
-from datetime import datetime
-
+from utils.vx_underground_utils import (
+    download_vx_underground_archive, 
+    update_vx_underground
+)
 from utils.dataframe_utils import (
     load_all_datasets,
     handle_duplicates,
     add_filetype,
-    generate_venn_diagram
+    generate_venn_diagram,
+    insert_dataframe_to_mongo,
+    insert_dict_to_mongo
 )
 
 def is_github_url(url):
@@ -131,7 +136,15 @@ def process_malware(plot_venn=True):
     df_malware = add_filetype(df_malware)
     df_malware["date_added"] = datetime.now().strftime("%Y/%m/%d")
     df_malware.to_pickle("malware_df.pkl")
+    for idx, row in df_malware.iterrows():
+        try:
+            insert_dict_to_mongo(row.to_dict(), collection)
+        except Exception as e:
+            print(f"Failed to insert row at index {idx}: {e}")
+
     print('------ Malware processing completed ------')
+
+
 
 def update_malware():
     """
