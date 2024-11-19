@@ -348,34 +348,69 @@ def get_orkl_report(offset=0, limit=1):
         print(f"Error fetching data from ORKL API: {response.status_code}")
         return None
 
+import re
+
+
+
+
+def get_report_info(report_uuid, text, existing_minhashes, link):
+    """
+    Process the report by performing deduplication, IOC extraction, and inserting into the database.
+    
+    :param report_uuid: The UUID of the ORKL report.
+    :param text: The plain text of the report.
+    :param existing_minhashes: List of minhashes already existing in the DB.
+    :param link: The link to the report.
+    """
+    # Deduplication check with minhash
+    print(f"[+] Processing ORKL Report {report_uuid}")
+    new_minhash = getMinHashFromFullText(text)
+    
+    if is_duplicate(new_minhash, existing_minhashes):
+        print(f"[!] ORKL Report {report_uuid} is a duplicate. Skipping.")
+        return
+
+    # Extract IOCs
+    print(f"[+] Extracting IOCs from ORKL Report {report_uuid}")
+    iocs = extract_iocs(text)
+    
+    # Insert into the database
+    print(f"[+] Inserting ORKL Report {report_uuid} into the database.")
+    insert_into_db(text, new_minhash, iocs, link)
+    print(f"[+] ORKL Report {report_uuid} processed and inserted successfully.")
+
+
 def process_orkl_report(report, existing_minhashes):
     """
-    Process a single ORKL report, extract text, IOCs and insert into the database.
+    Process a single ORKL report, extract text, IOCs, and insert into the database.
     
     :param report: The ORKL report object (as returned by the API).
     :param existing_minhashes: List of minhashes already existing in the DB.
     """
+    report_uuid = report.get('id')
+    if not report_uuid:
+        print("[!] Report ID is missing. Skipping.")
+        return
+
+    # Construct the link
+    link = f"ORKL Report {report_uuid}"
+
+    # Check if the report already exists in the database
+    print(f"[+] Checking if ORKL Report {report_uuid} already exists in the database.")
+    regex_pattern = re.compile(f"^ORKL Report {report_uuid}$", re.IGNORECASE)
+    db_entry = collection.find_one({"url": {"$regex": regex_pattern}})
+    
+    if db_entry:
+        print(f"[!] ORKL Report {report_uuid} already exists in the database. Skipping.")
+        return
+
+    # Check for plain text in the report
     text = report.get('plain_text')
-    
     if not text:
-        print(f"[!] ORKL Report {report.get('id')} has no plain text. Skipping.")
+        print(f"[!] ORKL Report {report_uuid} has no plain text. Skipping.")
         return
 
-    # minhash for deduplication
-    print(f"[+] Processing ORKL Report {report.get('id')}")
-    new_minhash = getMinHashFromFullText(text)
-    
-    # duplicate check
-    if is_duplicate(new_minhash, existing_minhashes):
-        print(f"[!] ORKL Report {report.get('id')} is a duplicate. Skipping.")
-        return
+    # Process the report (deduplication, IOC extraction, insertion)
+    get_report_info(report_uuid, text, existing_minhashes, link)
 
-    # IOCs
-    print(f"[+] Extracting IOCs from ORKL Report {report.get('id')}")
-    iocs = extract_iocs(text)
-    
-    # insertion
-    link = f"ORKL Report {report.get('id')}"
-    print(f"[+] Inserting ORKL Report {report.get('id')} into the database.")
-    insert_into_db(text, new_minhash, iocs, link)
-    print(f"[+] ORKL Report {report.get('id')} processed and inserted successfully.")
+

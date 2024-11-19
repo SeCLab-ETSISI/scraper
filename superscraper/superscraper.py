@@ -43,7 +43,7 @@ async def main():
 
     if links_df.empty:
         print("[!] No links to process for today.")
-        return
+        # return
 
     existing_minhashes = load_existing_minhashes_from_db()
 
@@ -84,6 +84,7 @@ async def main():
             process_orkl_report(report, existing_minhashes)
 
         offset += 1
+
 
     print(f"[!] Failed inserts: {failed_texts}")
     print(f"[!] Successful inserts: {successful_texts}")
