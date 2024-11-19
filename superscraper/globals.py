@@ -17,7 +17,7 @@ MONGO_CONNECTION_STRING = os.getenv("MONGO_CONNECTION_STRING")
 MONGO_DATABASE = os.getenv("MONGO_DATABASE")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
 GH_TOKEN = os.getenv("GH_TOKEN")
-
+MONGO_MALWARE_COLLECTION = os.getenv("MONGO_MALWARE_COLLECTION")
 
 if GH_TOKEN is None:
     raise ValueError("[-] GitHub token (GH_TOKEN) not found in .env")

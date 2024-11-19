@@ -6,8 +6,8 @@ import re
 from bs4 import BeautifulSoup
 import py7zr
 from file_analysis_utils import get_all_file_types, compute_hashes
-from dataframe_utils import update_mongo_collection
-from utils import load_last_scrap_time
+from dataframe_utils import update_mongo_collection, insert_dict_to_mongo
+from utils import SCRAPING_TIME
 import time
 import subprocess
 import logging
@@ -15,23 +15,11 @@ import pickle
 from tqdm import tqdm
 from pymongo import MongoClient
 
-from globals import SCRAP_TIME
+from globals import SCRAPING_TIME, MONGO_MALWARE_COLLECTION
 from metadata import get_metadata
-
-
-#SCRAP_TIME = datetime.now().strftime("%Y/%m/%d")
 
 logging.basicConfig(filename='vx_underground.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s', filemode='w')
-
-def load_last_scrap_time():
-    """Loads the last scraping time from the updater log.
-    with open('./updater.log', 'r') as f:
-        lines = f.readlines()
-        last_line = lines[-1]
-    return datetime.strptime(last_line.strip(), "%Y/%m/%d")
-    """
-    return SCRAP_TIME
 
 def request_with_retry(url, max_retries=3):
     """
@@ -155,7 +143,7 @@ def get_file_details_vx_underground(file_path):
         "file_size": os.path.getsize(file_path),
         "campaign": campaign,
         "year": year,
-        "date_added": SCRAP_TIME
+        "date_added": SCRAPING_TIME
     }
 
 def is_compressed_file(file_path):
@@ -335,7 +323,7 @@ def scrape_base_page_vx(base_url, download_archive=False):
     all_data = {}
     response = request_with_retry(base_url)
     soup = BeautifulSoup(response.text, 'html.parser')
-    last_scrap = load_last_scrap_time()
+    last_scrap = SCRAPING_TIME()
     file_display_div = soup.find('div', id='file-display')
     if file_display_div:
         for year_div in file_display_div.find_all('div'):
@@ -426,7 +414,7 @@ def insert_new_file_in_malware_df(file_details):
         'file_type_libmagic': file_types[1],
         'file_type_exiftool': file_types[2],
         'virustotal_reports': None,
-        'date_added': SCRAP_TIME
+        'date_added': SCRAPING_TIME
     })
     return file_details
 
@@ -492,18 +480,23 @@ def update_vx_underground(base_url="https://vx-underground.org/APTs"):
                                         new_row = insert_new_file_in_malware_df(file_details)
                                         new_malware_rows.append(new_row)
                                     else: # if the file is already in malware_df by other source
-
                                         idx = malware_df[malware_df['sha256'] == file_details['sha256']].index[0]
                                         updated_row = add_extra_information_malware_df(file_details, malware_df.loc[idx].copy())
                                         malware_df.loc[idx] = updated_row
-                                        update_mongo_collection(updated_row.to_dict(), collection)
+                                        try:
+                                            update_mongo_collection(updated_row.to_dict(), MONGO_MALWARE_COLLECTION)
+                                        except Exception as e:
+                                            print(f"Failed to update row when updating vx underground. Row at index {idx}. Exception {e}")
                         pbar.update(1)
 
     if new_malware_rows:
         malware_df = pd.concat([malware_df, pd.DataFrame(new_malware_rows)], ignore_index=True)
         logging.info(f"Added {len(new_malware_rows)} new rows to malware_df.")
         for new_row in new_malware_rows:
-            update_mongo_collection(new_row, collection)
+            try:
+                insert_dict_to_mongo(new_row, MONGO_MALWARE_COLLECTION)
+            except Exception as e:
+                print(f"Failed to insert row when updating vx underground. Row at index {idx}. Exception {e}")
     if new_vx_rows:
         vx_underground = pd.concat([vx_underground, pd.DataFrame(new_vx_rows)], ignore_index=True)
         vx_underground.to_csv('./vx_underground.csv', index=False)
@@ -516,6 +509,10 @@ def update_vx_underground(base_url="https://vx-underground.org/APTs"):
     logging.info(f"Updated vx_underground shape: {vx_underground.shape}")
     logging.info(f"Updated malware_df shape: {malware_df.shape}")
 
+
+"""
+#Delete when everything is tested
+
 def main():
     logging.info("Starting to download vx_underground files...")
     logging.info(datetime.now())
@@ -527,3 +524,4 @@ def main():
 
 #if __name__ == "__main__":
 #    main()
+ """

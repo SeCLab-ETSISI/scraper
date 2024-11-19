@@ -16,7 +16,7 @@ from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLL
 logging.basicConfig(filename='malware_analysis.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
-def insert_dict_to_mongo(data, db_name, collection_name, mongo_uri=MONGO_CONNECTION_STRING):
+def insert_dict_to_mongo(data, collection_name):
     """
     Inserts a dictionary into a MongoDB collection.
 
@@ -31,8 +31,8 @@ def insert_dict_to_mongo(data, db_name, collection_name, mongo_uri=MONGO_CONNECT
         int: The number of documents inserted.
     
     """
-    client = MongoClient(mongo_uri)
-    db = client[db_name]
+    client = MongoClient(MONGO_CONNECTION_STRING)
+    db = client[MONGO_DATABASE]
     collection = db[collection_name]
     
     # Insert records into the collection
@@ -40,16 +40,16 @@ def insert_dict_to_mongo(data, db_name, collection_name, mongo_uri=MONGO_CONNECT
     
     return len(result.inserted_id)
 
-def update_mongo_collection(file_details):
+def update_mongo_collection(file_details, collection_name):
     """
     Updates a MongoDB collection with new file details or modifies existing ones.
 
     Args:
         file_details (dict): The details of the new file.
     """
-    client = MongoClient('mongodb://localhost:27017/')
-    db = client['your_database_name']
-    collection = db['your_collection_name']
+    client = MongoClient(MONGO_CONNECTION_STRING)
+    db = client[MONGO_DATABASE]
+    collection = db[collection_name]
     
     sha256 = file_details['sha256']
     existing_entry = collection.find_one({"sha256": sha256})
@@ -63,6 +63,7 @@ def update_mongo_collection(file_details):
     else:
         # Insert a new entry if it doesn't exist
         collection.insert_one(file_details)
+
 def index_files(folder_path):
     """
     Indexes files in a given folder and maps filenames to their full paths.

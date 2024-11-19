@@ -31,9 +31,9 @@ from utils.dataframe_utils import (
     handle_duplicates,
     add_filetype,
     generate_venn_diagram,
-    insert_dataframe_to_mongo,
     insert_dict_to_mongo
 )
+from globals import SCRAPING_TIME, MONGO_MALWARE_COLLECTION
 
 def is_github_url(url):
     """
@@ -134,13 +134,13 @@ def process_malware(plot_venn=True):
         generate_venn_diagram(df_malware)
 
     df_malware = add_filetype(df_malware)
-    df_malware["date_added"] = datetime.now().strftime("%Y/%m/%d")
+    df_malware["date_added"] = SCRAPING_TIME
     df_malware.to_pickle("malware_df.pkl")
     for idx, row in df_malware.iterrows():
         try:
-            insert_dict_to_mongo(row.to_dict(), collection)
+            insert_dict_to_mongo(row.to_dict(), MONGO_MALWARE_COLLECTION)
         except Exception as e:
-            print(f"Failed to insert row at index {idx}: {e}")
+            print(f"Failed to insert row at main when processing malware. Row at index {idx}. Exception {e}")
 
     print('------ Malware processing completed ------')
 
@@ -155,13 +155,22 @@ def update_malware():
     print("------ Update completed ------")
 
 def download_synonyms():
-    print("------ Downloading synonyms ------")
-    download_github_repo_as_zip("cyber-research", "synonyms")
-    print("------ Download completed ------")
+    """
+
+    """
+    pass
 
 def process_synonyms():
-    pass
+    """
     
+    """
+    pass
+
+def update_synonyms():
+    """
+    
+    """
+    pass
 def main():
     # process the reports
     asyncio.run(process_reports())
