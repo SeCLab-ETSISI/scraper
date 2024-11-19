@@ -125,18 +125,18 @@ def process_malware(plot_venn=True):
     Merge all the datasets of malware, filter duplicates and process the binaries to obtain the file type.
     """
     print("------ Processing malware ------")
-    df_malware = load_all_datasets(base_path="./")
-    df_malware = handle_duplicates(df_malware)
-    print(f"Final DataFrame contains {len(df_malware)} unique samples but there are {df_malware['file_path'].isnull().sum()} missing files")
-    print("Of those missing, they come from:\n",df_malware[df_malware["available"]==False]["source"].value_counts())
+    malware_df = load_all_datasets(base_path="./")
+    malware_df = handle_duplicates(malware_df)
+    print(f"Final DataFrame contains {len(malware_df)} unique samples but there are {malware_df['file_path'].isnull().sum()} missing files")
+    print("Of those missing, they come from:\n",malware_df[malware_df["available"]==False]["source"].value_counts())
     print("="*40)
     if plot_venn:
-        generate_venn_diagram(df_malware)
+        generate_venn_diagram(malware_df)
 
-    df_malware = add_filetype(df_malware)
-    df_malware["date_added"] = SCRAPING_TIME
-    df_malware.to_pickle("malware_df.pkl")
-    for idx, row in df_malware.iterrows():
+    malware_df = add_filetype(malware_df)
+    malware_df["date_added"] = SCRAPING_TIME
+    malware_df.to_pickle("malware_df.pkl")
+    for idx, row in malware_df.iterrows():
         try:
             insert_dict_to_mongo(row.to_dict(), MONGO_MALWARE_COLLECTION)
         except Exception as e:
