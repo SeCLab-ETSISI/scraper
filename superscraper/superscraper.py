@@ -185,7 +185,7 @@ def get_virustotal_report(sha256):
     
     if response.status_code == 200:
         # Save the report to a JSON file
-        with open(f"./virustotal_reports/{sha256}.json", 'w') as file:
+        with open(f"{PATH_VT_REPORTS}/{sha256}.json", 'w') as file:
             json.dump(response.json(), file)
         return True
     else:
@@ -246,8 +246,7 @@ def insert_virustotal_reports():
     client = MongoClient(MONGO_CONNECTION_STRING)
     try:
         db = client[MONGO_DATABASE]
-        collection = db["virustotal_reports"]
-        
+        collection = db[MONGO_VIRUSTOTAL_COLLECTION]
         for filename in os.listdir(PATH_VT_REPORTS):
             if filename.endswith(".json"):
                 insert_vt_report_to_mongo(f"{PATH_VT_REPORTS}/{filename}", collection)
