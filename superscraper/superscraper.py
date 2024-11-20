@@ -13,8 +13,9 @@ from utils import (
     process_orkl_report
 )
 from urllib.parse import urlparse
-from globals import GH_TOKEN
+from globals import GH_TOKEN, SCRAPING_TIME
 from datasketch import MinHash
+from datetime import datetime
 
 def is_github_url(url):
     """
@@ -32,22 +33,33 @@ async def main():
     if GH_TOKEN is None:
         raise ValueError("GitHub token is None.")
     
+    # read the links file
     links_df = pd.read_csv('../links/links.csv')
+
+    # convert 'date' column to datetime and filter for today's date
+    links_df['date'] = pd.to_datetime(links_df['date'], format="%Y/%m/%d")
+    today_date = datetime.strptime(SCRAPING_TIME, "%Y/%m/%d")
+    links_df = links_df[links_df['date'] == today_date]
+
+    if links_df.empty:
+        print("[!] No links to process for today.")
+        # return
+
     existing_minhashes = load_existing_minhashes_from_db()
 
     i = 1
     failed_texts = 0
     successful_texts = 0
 
-    for link in links_df['link']:
-        link = link.strip()
+    for _, row in links_df.iterrows():
+        link = row['link'].strip()
 
         print("------ Processing link: ", i)
         if is_github_url(link):
             owner, repo = link.split('/')[-2:]
             await extract_pdfs_from_repo(owner, repo, '../pdf_files', branches=["main", "master"], token=GH_TOKEN)
             print(f"[+] Processing repo {link}")
-        else:
+        else:  # process the link
             print(f"Extracting text from URL {link}")
             text = await extract_text_from_url(link)
             if text:
@@ -72,6 +84,7 @@ async def main():
             process_orkl_report(report, existing_minhashes)
 
         offset += 1
+
 
     print(f"[!] Failed inserts: {failed_texts}")
     print(f"[!] Successful inserts: {successful_texts}")
