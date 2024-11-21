@@ -96,7 +96,7 @@ def decompress_file(file_path, password="infected"):
         logging.error(f"Failed to extract {file_path} with all provided passwords.")
         return None, None
 
-    os.rename(file_path, f"./zips_with_malware/{file_name}")
+    os.rename(file_path, f"/home/matm/work/datasets/zips_with_malware/{file_name}")
     # Gather a list of extracted files
     extracted_files = []
     for root, _, files in os.walk(output_dir):
@@ -220,14 +220,14 @@ def download_vx_underground_archive():
     """
     Downloads the 'vx_underground' archive, extracts all '.7z' files, and generates a CSV of the file information.
     """
-    directory = "./vx_underground"
+    directory = "/home/matm/work/datasets/vx_underground"
     os.makedirs(directory, exist_ok=True)
     archive_url = "https://vx-underground.org/APTs/Yearly%20Archives"
 
     logging.info("Starting to download vx_underground files...")
     scrape_base_page_vx(archive_url, download_archive=True) # almost 2h to download all the malware samples
     extract_all_7z_files(directory)
-    generate_csv_vx_underground(directory, f"./vx_underground.csv")
+    generate_csv_vx_underground(directory, f"/home/matm/work/datasets/vx_underground.csv")
     logging.info("Extraction of vx_underground completed.")
 
 
@@ -334,7 +334,7 @@ def scrape_base_page_vx(base_url, download_archive=False):
                     year_url = f"{base_url}/{year}"
                     logging.info(f"Scraping year: {year}")
                     if download_archive:
-                        archive_path = f"./vx_underground/{year}.7z"
+                        archive_path = f"/home/matm/work/datasets/vx_underground/{year}.7z"
                         if not os.path.exists(archive_path):
                             archive_url = f"{base_url}/{year}.7z"
                             download_file(archive_url, archive_path)
@@ -357,7 +357,7 @@ def handle_new_file_or_folder(file, year, campaign):
     """
     file_name = file['file_name']
     file_link = file['file_link']
-    directory = f"./new_vx_underground/{year}/{campaign}/Samples"
+    directory = f"/home/matm/work/datasets/new_vx_underground/{year}/{campaign}/Samples"
     os.makedirs(directory, exist_ok=True)
     file_path = os.path.join(directory, file_name)
 
@@ -387,7 +387,7 @@ def move_new_file_vx_folder(file_path):
     """
     path_parts = file_path.split("vx_underground")[1].split(os.sep)
     year, campaign, file_name = path_parts[1], path_parts[2], path_parts[-1]
-    new_path = f"./vx_underground/{year}/{campaign}/Samples/{file_name}"
+    new_path = f"/home/matm/work/datasets/vx_underground/{year}/{campaign}/Samples/{file_name}"
     os.makedirs(os.path.dirname(new_path), exist_ok=True)
     os.rename(file_path, new_path)
     return new_path
@@ -427,10 +427,10 @@ def add_extra_information_malware_df(file_details, updated_row):
         pd.Series: The updated row with additional information.
     """
     # Update the "file_paths" field
-    current_file_paths = updated_row.get('file_paths', "")
-    file_paths = set(current_file_paths.split(", ")) if current_file_paths else set()
+    current_file_paths = updated_row.get('file_paths', [])
+    file_paths = set(current_file_paths) if current_file_paths else set()
     file_paths.add(file_details['file_path'])
-    updated_row['file_paths'] = ", ".join(sorted(file_paths))
+    updated_row['file_paths'] = sorted(list(file_paths))
 
     # Update the 'source' field
     current_sources = updated_row.get('source', "")
