@@ -121,7 +121,7 @@ def generate_df(df, csv_name, sha256_column, filesize_column, apt_group_column, 
         "csv_name": [csv_name] * len(df),
         "sha256": df[sha256_column],
         "file_path": df["file_path"],
-        "file_paths": df["file_path"],
+        "file_paths": [df["file_path"]],
         "virustotal_report_path": df["virustotal_report_path"] if "virustotal_report_path" in df.columns else None,
         "md5": df["md5"] if "md5" in df.columns else None,
         "sha1": df["sha1"] if "sha1" in df.columns else None,
@@ -145,7 +145,7 @@ def handle_duplicates(df):
     """
     df = df.groupby('sha256').agg({
         'csv_name': lambda x: ', '.join(str(v) for v in x.unique() if v is not None),
-        'file_paths': lambda x: ', '.join(str(v) for v in x if v is not None),
+        'file_paths': lambda x: [v for v in x if v is not None or v != ''],
         'file_path': 'first',
         'virustotal_report_path': 'first',
         'md5': 'first',
