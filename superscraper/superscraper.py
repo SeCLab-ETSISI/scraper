@@ -8,6 +8,9 @@ from datasketch import MinHash
 import os
 import json
 from pymongo import MongoClient
+import pickle
+import re
+from datetime import datetime
 from utils.utils import (
     extract_pdfs_from_repo,
     extract_text_from_url,
@@ -22,10 +25,6 @@ from utils.utils import (
     download_vx_underground_archive,
     update_vx_underground
 )
-from urllib.parse import urlparse
-from globals import GH_TOKEN, SCRAPING_TIME
-from datasketch import MinHash
-from datetime import datetime
 from utils.vx_underground_utils import (
     download_vx_underground_archive, 
     update_vx_underground
@@ -37,7 +36,20 @@ from utils.dataframe_utils import (
     generate_venn_diagram,
     insert_dict_to_mongo
 )
-from globals import SCRAPING_TIME, GH_TOKEN, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_MALWARE_COLLECTION, VIRUSTOTAL_API_KEY, PATH_VT_REPORTS, MONGO_VIRUSTOTAL_COLLECTION
+from utils.synonyms_utils import (
+    download_apt_spreadsheet,
+    extract_sheets_to_folder,
+    fetch_malpedia_actors,
+    fetch_mitre_actors,
+    process_ethernal_csv,
+    merge_actors,
+    process_apt_spreadsheet
+)
+from globals import (
+    SCRAPING_TIME, GH_TOKEN, VIRUSTOTAL_API_KEY, PATH_VT_REPORTS,
+    MONGO_CONNECTION_STRING, MONGO_DATABASE, 
+    MONGO_MALWARE_COLLECTION, MONGO_VIRUSTOTAL_COLLECTION, MONGO_SYNONYMS_COLLECTION
+)
 
 def is_github_url(url):
     """
@@ -254,23 +266,75 @@ def insert_virustotal_reports():
         client.close()
         print("------ Upload completed ------")
 
+def insert_synonyms(synonyms):
+    """
+    Insert the synonyms into the MongoDB collection.
+
+    Args:
+        synonyms (dict): Dictionary containing the synonyms.
+
+    """
+    client = MongoClient(MONGO_CONNECTION_STRING)
+    try:
+        db = client[MONGO_DATABASE]
+        collection = db[MONGO_SYNONYMS_COLLECTION]
+        collection.insert_one(synonyms)
+    finally:
+        client.close()
+
 def download_synonyms():
     """
 
     """
+    download_github_repo_as_zip("StrangerealIntel", "EternalLiberty")
+    malpedia_url = "https://malpedia.caad.fkie.fraunhofer.de/actors"
+    mitre_url = "https://attack.mitre.org/groups/"
+    ethernal_csv_path = './EternalLiberty/EternalLiberty.csv'
+    spreadsheet_url = "https://docs.google.com/spreadsheets/d/1H9_xaxQHpWaa4O_Son4Gx0YOIzlcBWMsdvePFX68EKU/export?format=xlsx"
+    excel_path = "apt_spreadsheet.xlsx"
+    sheets_folder = "sheets"
+
+    download_apt_spreadsheet(spreadsheet_url, excel_path)
+    extract_sheets_to_folder(excel_path, sheets_folder)
+    actors_excel = process_apt_spreadsheet(sheets_folder)
+
+    actors_malpedia = fetch_malpedia_actors(malpedia_url)
+    actors_mitre = fetch_mitre_actors(mitre_url)
+    actors_ethernal = process_ethernal_csv(ethernal_csv_path)
+
+    with open("synonyms.pkl", "wb") as file:
+        synonyms = {
+            "malpedia": actors_malpedia,
+            "mitre": actors_mitre,
+            "ethernal": actors_ethernal,
+            "excel": actors_excel
+        }
+        pickle.dump(synonyms, file)
+    
+
     pass
 
 def process_synonyms():
     """
     
     """
-    pass
+    with open("synonyms.pkl", "rb") as file:
+        synonyms = pickle.load(file)
+    
+    actors_malpedia = synonyms["malpedia"]
+    actors_mitre = synonyms["mitre"]
+    actors_ethernal = synonyms["ethernal"]
+    actors_excel = synonyms["excel"]
+
+    synonyms_merged = merge_actors(actors_malpedia, actors_mitre, actors_ethernal, actors_excel)
+    insert_synonyms(synonyms_merged)
 
 def update_synonyms():
     """
     
     """
     pass
+
 def main():
     # process the reports
     asyncio.run(process_reports())
@@ -282,11 +346,9 @@ def main():
 
     update_malware() # always update malware
 
-    if not os.path.exists("./synonyms.pkl"):
-        download_synonyms()
-        process_synonyms()
-    else:
-        update_synonyms()
+    # I think it is better to update the synonyms every time, as they may have corrections, discuss with IP
+    download_synonyms()
+    process_synonyms()
 
 if __name__ == "__main__":
     main()
