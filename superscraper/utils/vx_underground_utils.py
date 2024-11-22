@@ -474,6 +474,7 @@ def update_vx_underground(collection, base_url="https://vx-underground.org/APTs"
                                     new_vx_rows.append(file_details)
                                     if file_details['sha256'] not in malware_df['sha256'].values: # if the file is not already in malware_df by other source
                                         # Insert a new row for malware_df
+                                        del file_details['year'] # remove from file_details the "year" key that is only for vx_underground
                                         new_row = insert_new_file_in_malware_df(file_details)
                                         new_malware_rows.append(new_row)
                                     else: # if the file is already in malware_df by other source
@@ -506,19 +507,3 @@ def update_vx_underground(collection, base_url="https://vx-underground.org/APTs"
     logging.info(f"Updated vx_underground shape: {vx_underground.shape}")
     logging.info(f"Updated malware_df shape: {malware_df.shape}")
     return malware_df
-
-"""
-#Delete when everything is tested
-
-def main():
-    logging.info("Starting to download vx_underground files...")
-    logging.info(datetime.now())
-    download_vx_underground_archive()
-    update_vx_underground()
-    logging.info("Extraction of vx_underground completed.")
-    logging.info(datetime.now())
-
-
-#if __name__ == "__main__":
-#    main()
- """
