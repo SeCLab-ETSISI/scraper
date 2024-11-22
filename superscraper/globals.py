@@ -1,5 +1,7 @@
 import os
 from dotenv import load_dotenv
+from datetime import datetime
+import warnings
 
 load_dotenv(".env")
 
@@ -17,9 +19,15 @@ MONGO_CONNECTION_STRING = os.getenv("MONGO_CONNECTION_STRING")
 MONGO_DATABASE = os.getenv("MONGO_DATABASE")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION")
 GH_TOKEN = os.getenv("GH_TOKEN")
+MONGO_MALWARE_COLLECTION = os.getenv("MONGO_MALWARE_COLLECTION")
 
+
+VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY")
+MONGO_VIRUSTOTAL_COLLECTION = os.getenv("MONGO_VIRUSTOTAL_COLLECTION")
+PATH_VT_REPORTS = os.getenv("PATH_VT_REPORTS")
 
 if GH_TOKEN is None:
-    raise ValueError("[-] GitHub token (GH_TOKEN) not found in .env")
+    warnings.warn("[-] GitHub token (GH_TOKEN) not found in .env", RuntimeWarning)
 
 ORKL_API_URL = 'https://orkl.eu/api/v1/library/entries'
+SCRAPING_TIME = datetime.now().strftime("%Y/%m/%d")
