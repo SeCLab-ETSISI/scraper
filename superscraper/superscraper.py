@@ -70,8 +70,9 @@ def download_github_repo_as_zip(owner, repo, branch="main"):
     if response.status_code == 200:
         # Download and extract the zip file
         with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
-            zip_ref.extractall(f"{repo}-{branch}")
-        print(f"{repo} repository downloaded and extracted to '{repo}-{branch}' folder.")
+            zip_ref.extractall("./")
+        os.rename(f"{repo}-{branch}", repo)
+        print(f"{repo} repository downloaded and extracted to the current folder folder.")
     else:
         print("Failed to download repository. Please check the repository name and branch.")
     
