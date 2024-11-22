@@ -288,7 +288,7 @@ def download_synonyms():
 
     """
     download_github_repo_as_zip("StrangerealIntel", "EternalLiberty")
-    ethernal_csv_path = './EternalLiberty-main/EternalLiberty.csv'
+    ethernal_csv_path = './EternalLiberty/EternalLiberty.csv'
     actors_ethernal = process_ethernal_csv(ethernal_csv_path)
 
     malpedia_url = "https://malpedia.caad.fkie.fraunhofer.de/actors"
