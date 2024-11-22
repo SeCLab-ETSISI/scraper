@@ -31,3 +31,7 @@ if GH_TOKEN is None:
 
 ORKL_API_URL = 'https://orkl.eu/api/v1/library/entries'
 SCRAPING_TIME = datetime.now().strftime("%Y/%m/%d")
+
+PATH_TO_IOCSEARCHER = os.getenv("PATH_TO_IOCSEARCHER")
+EXE_FEATURE_COLLECTION = os.getenv("EXE_FEATURE_COLLECTION")
+DOC_FEATURE_COLLECTION = os.getenv("DOC_FEATURE_COLLECTION")

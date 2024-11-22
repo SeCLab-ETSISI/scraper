@@ -39,6 +39,8 @@ from utils.dataframe_utils import (
 )
 from globals import SCRAPING_TIME, GH_TOKEN, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_MALWARE_COLLECTION, VIRUSTOTAL_API_KEY, PATH_VT_REPORTS, MONGO_VIRUSTOTAL_COLLECTION
 
+from utils.feature_extraction_utils import get_features
+
 def is_github_url(url):
     """
     Check if the given URL is a GitHub URL.
@@ -271,6 +273,11 @@ def update_synonyms():
     
     """
     pass
+
+def malware_features():
+    df = pd.read_pickle("./malware_df.pkl")
+    get_features(df)
+
 def main():
     # process the reports
     asyncio.run(process_reports())
@@ -281,6 +288,8 @@ def main():
         insert_virustotal_reports()
 
     update_malware() # always update malware
+
+    malware_features() # get features from the malware
 
     if not os.path.exists("./synonyms.pkl"):
         download_synonyms()
