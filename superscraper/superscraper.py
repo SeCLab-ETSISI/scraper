@@ -287,20 +287,21 @@ def download_synonyms():
 
     """
     download_github_repo_as_zip("StrangerealIntel", "EternalLiberty")
-    malpedia_url = "https://malpedia.caad.fkie.fraunhofer.de/actors"
-    mitre_url = "https://attack.mitre.org/groups/"
     ethernal_csv_path = './EternalLiberty/EternalLiberty.csv'
+    actors_ethernal = process_ethernal_csv(ethernal_csv_path)
+
+    malpedia_url = "https://malpedia.caad.fkie.fraunhofer.de/actors"
+    actors_malpedia = fetch_malpedia_actors(malpedia_url)
+    mitre_url = "https://attack.mitre.org/groups/"
+    actors_mitre = fetch_mitre_actors(mitre_url)
+
     spreadsheet_url = "https://docs.google.com/spreadsheets/d/1H9_xaxQHpWaa4O_Son4Gx0YOIzlcBWMsdvePFX68EKU/export?format=xlsx"
     excel_path = "apt_spreadsheet.xlsx"
     sheets_folder = "sheets"
-
     download_apt_spreadsheet(spreadsheet_url, excel_path)
     extract_sheets_to_folder(excel_path, sheets_folder)
     actors_excel = process_apt_spreadsheet(sheets_folder)
 
-    actors_malpedia = fetch_malpedia_actors(malpedia_url)
-    actors_mitre = fetch_mitre_actors(mitre_url)
-    actors_ethernal = process_ethernal_csv(ethernal_csv_path)
 
     with open("synonyms.pkl", "wb") as file:
         synonyms = {
@@ -316,7 +317,7 @@ def download_synonyms():
 
 def process_synonyms():
     """
-    
+    Merge the synonyms and insert them into the MongoDB collection.
     """
     with open("synonyms.pkl", "rb") as file:
         synonyms = pickle.load(file)
