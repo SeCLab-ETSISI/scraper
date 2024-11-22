@@ -285,7 +285,7 @@ def insert_synonyms(synonyms):
 
 def download_synonyms():
     """
-
+    Download the synonyms from the different sources and insert them into the MongoDB collection.
     """
     download_github_repo_as_zip("StrangerealIntel", "EternalLiberty")
     ethernal_csv_path = './EternalLiberty/EternalLiberty.csv'
@@ -313,12 +313,12 @@ def download_synonyms():
         }
         pickle.dump(synonyms, file)
     
+    insert_synonyms(synonyms)
 
-    pass
 
 def process_synonyms():
     """
-    Merge the synonyms and insert them into the MongoDB collection.
+    Merge the synonyms 
     """
     with open("synonyms.pkl", "rb") as file:
         synonyms = pickle.load(file)
@@ -329,7 +329,7 @@ def process_synonyms():
     actors_excel = synonyms["excel"]
 
     synonyms_merged = merge_actors(actors_malpedia, actors_mitre, actors_ethernal, actors_excel)
-    insert_synonyms(synonyms_merged)
+
 
 def update_synonyms():
     """
