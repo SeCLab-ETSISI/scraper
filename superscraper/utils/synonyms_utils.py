@@ -158,15 +158,8 @@ def process_apt_spreadsheet(sheets_folder):
     
     microsoft_excel_path = os.path.join(sheets_folder, "Microsoft 2023 renaming taxonom.xlsx")
     apt_names_dict = process_microsoft_excel(apt_names_dict, microsoft_excel_path)
-    
-    # Save the dictionary to a pickle file
-    pickle_file_path = "apt_names_dict.pkl"
-    with open(pickle_file_path, 'wb') as f:
-        pickle.dump(apt_names_dict, f)
-    print(f"APT names dictionary saved to {pickle_file_path}")
 
     return apt_names_dict
-
 
 # Fetch actors from Malpedia
 def fetch_malpedia_actors(url):
