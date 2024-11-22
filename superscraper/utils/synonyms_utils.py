@@ -1,354 +1,329 @@
-import pandas as pd
-import asyncio
-import requests
-import zipfile
-import io
-from urllib.parse import urlparse
-from datasketch import MinHash
 import os
-import json
-from pymongo import MongoClient
+import pandas as pd
+import requests
 import pickle
 import re
-from datetime import datetime
-from utils.utils import (
-    extract_pdfs_from_repo,
-    extract_text_from_url,
-    getMinHashFromFullText,
-    is_duplicate,
-    extract_iocs,
-    collection,
-    insert_into_db,
-    load_existing_minhashes_from_db,
-    get_orkl_report,
-    process_orkl_report,
-    download_vx_underground_archive,
-    update_vx_underground
-)
-from utils.vx_underground_utils import (
-    download_vx_underground_archive, 
-    update_vx_underground
-)
-from utils.dataframe_utils import (
-    load_all_datasets,
-    handle_duplicates,
-    add_filetype,
-    generate_venn_diagram,
-    insert_dict_to_mongo
-)
-from utils.synonyms_utils import (
-    download_apt_spreadsheet,
-    extract_sheets_to_folder,
-    fetch_malpedia_actors,
-    fetch_mitre_actors,
-    process_ethernal_csv,
-    merge_actors,
-    process_apt_spreadsheet
-)
-from globals import (
-    SCRAPING_TIME, GH_TOKEN, VIRUSTOTAL_API_KEY, PATH_VT_REPORTS,
-    MONGO_CONNECTION_STRING, MONGO_DATABASE, 
-    MONGO_MALWARE_COLLECTION, MONGO_VIRUSTOTAL_COLLECTION, MONGO_SYNONYMS_COLLECTION
-)
+from bs4 import BeautifulSoup
 
-def is_github_url(url):
+# Download APT spreadsheet from Google Sheets
+def download_apt_spreadsheet(url, output_path="apt_spreadsheet.xlsx"):
     """
-    Check if the given URL is a GitHub URL.
+    Downloads a spreadsheet from a given URL and saves it locally.
 
-    :param url: URL to check.
-    :return: True if URL is a GitHub URL, False otherwise.
+    Args:
+        url (str): The URL of the spreadsheet.
+        output_path (str): Path to save the downloaded spreadsheet.
     """
-    return 'github.com' in urlparse(url).netloc
-
-def download_github_repo_as_zip(owner, repo, branch="main"):
-    """
-    Download a GitHub repository as a zip file.
-    """
-    url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip"
+    print("Downloading APT spreadsheet...")
     response = requests.get(url)
-    
     if response.status_code == 200:
-        # Download and extract the zip file
-        with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
-            zip_ref.extractall(f"{repo}-{branch}")
-        print(f"{repo} repository downloaded and extracted to '{repo}-{branch}' folder.")
+        with open(output_path, 'wb') as file:
+            file.write(response.content)
+        print(f"Spreadsheet downloaded successfully to {output_path}")
     else:
-        print("Failed to download repository. Please check the repository name and branch.")
+        raise Exception(f"Failed to download spreadsheet. Status code: {response.status_code}")
+
+# Extract sheets into separate files
+def extract_sheets_to_folder(excel_file_path, output_folder='sheets'):
+    """
+    Extracts all sheets from an Excel file into individual files in a specified folder.
+
+    Args:
+        excel_file_path (str): Path to the Excel file.
+        output_folder (str): Folder to save extracted sheets.
+    """
+    print("Extracting sheets to folder...")
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    excel_data = pd.ExcelFile(excel_file_path)
+    for sheet_name in excel_data.sheet_names:
+        sheet_data = excel_data.parse(sheet_name)
+        output_file_path = os.path.join(output_folder, f"{sheet_name}.xlsx")
+        sheet_data.to_excel(output_file_path, index=False)
+        print(f"Saved sheet '{sheet_name}' to {output_file_path}")
+
+
+def search_apt_names(apt_dict, names):
+    """
+    Searches the APT names dictionary for a given list of names.
+
+    Args:
+        apt_dict (dict): APT names dictionary.
+        names (list): List of names to search for.
     
-
-async def process_reports():
+    Returns:
+        str: Common name of the APT group if found, otherwise None.
     """
-    Main function to process links from links.csv and extract data accordingly.
+    for common_name, info in apt_dict.items():
+        if any(name in info["synonyms"] for name in names):
+            return common_name
+        elif any(name == common_name for name in names):
+            return common_name
+    return None
+
+
+def process_microsoft_excel(apt_dict, microsoft_excel_path):
     """
-    if GH_TOKEN is None:
-        raise ValueError("GitHub token is None.")
-    
-    # read the links file
-    links_df = pd.read_csv('../links/links.csv')
+    Updates the APT names dictionary with the Microsoft data from an Excel file.
 
-    # convert 'date' column to datetime and filter for today's date
-    links_df['date'] = pd.to_datetime(links_df['date'], format="%Y/%m/%d")
-    today_date = datetime.strptime(SCRAPING_TIME, "%Y/%m/%d")
-    links_df = links_df[links_df['date'] == today_date]
+    Args:
+        apt_dict (dict): APT names dictionary.
+        microsoft_excel_path (str): Path to the Microsoft Excel file.
 
-    if links_df.empty:
-        print("[!] No links to process for today.")
-        # return
-
-    existing_minhashes = load_existing_minhashes_from_db()
-
-    i = 1
-    failed_texts = 0
-    successful_texts = 0
-
-    for _, row in links_df.iterrows():
-        link = row['link'].strip()
-
-        print("------ Processing link: ", i)
-        if is_github_url(link):
-            owner, repo = link.split('/')[-2:]
-            await extract_pdfs_from_repo(owner, repo, '../pdf_files', branches=["main", "master"], token=GH_TOKEN)
-            print(f"[+] Processing repo {link}")
-        else:  # process the link
-            print(f"Extracting text from URL {link}")
-            text = await extract_text_from_url(link)
-            if text:
-                print("Extracting IOCs")
-                iocs = extract_iocs(text)
-                print("Inserting")
-                insert_into_db(text, existing_minhashes, iocs, link)
-                successful_texts += 1
-            else:
-                failed_texts += 1
-        i += 1
-
-    print("------ Processing ORKL reports ------")
-    offset = 0
-    while True:
-        reports = get_orkl_report(offset=offset, limit=1)
-        if reports is None:
-            print(f"No more reports found at offset {offset}. Stopping.")
-            break
-        
-        for report in reports:
-            process_orkl_report(report, existing_minhashes)
-
-        offset += 1
-
-
-    print(f"[!] Failed inserts: {failed_texts}")
-    print(f"[!] Successful inserts: {successful_texts}")
-
-def download_malware():
+    Returns:
+        dict: Updated APT names dictionary.
     """
-    Download the malware datasets from GitHub and VX Underground. The rest of datasets are manuallt downloaded because they are not openly available.
+    microsoft_df = pd.read_excel(microsoft_excel_path).dropna(how='all', axis=1).dropna(how='all')
+    microsoft_df.columns = microsoft_df.iloc[0]
+    microsoft_df = microsoft_df.iloc[1:]
+    first_four_columns = microsoft_df.iloc[:, :4].reset_index(drop=True)
+    remaining_columns = microsoft_df.iloc[:, 4:].reset_index(drop=True)
+    microsoft_df = pd.concat([first_four_columns, remaining_columns], ignore_index=True).dropna(how='all')
+    for _, row in microsoft_df.iterrows():
+        nation = row["Origin/Threat"].lower().replace(" ", "_")
+        names = [row[i] for i in ['Previous name', 'New name', 'Other names'] if pd.notna(row[i])]
+        common_name = search_apt_names(apt_dict, names)
+
+        if common_name:
+            synonyms = set(apt_dict[common_name]["synonyms"].split(", ") + [row['Previous name'], row['New name']])
+            apt_dict[common_name]["synonyms"] = ", ".join(synonyms)
+        else:
+            apt_dict[row["New name"]] = {"synonyms": ", ".join(names), "operations": [], "nation": nation}
+    return apt_dict
+
+# Function to extract APT information
+def extract_apt_info(file_path, nation, info):
     """
-    print("------ Downloading malware ------")
-    download_github_repo_as_zip("cyber-research", "APTMalware")
-    download_vx_underground_archive() # Download VX Underground archive and creates a CSV file with the malware information.
-    print("------ Download completed ------")
+    Extract APT names and operations from the given Excel file.
 
-def process_malware(plot_venn=True):
+    Args:
+        file_path (str): Path to the Excel file.
+        nation (str): Nation associated with the APT.
+        info (dict): Dictionary containing column ranges for APT names and operations.
+
+    Returns:
+        dict: Dictionary containing APT names and operations.
     """
-    Merge all the datasets of malware, filter duplicates and process the binaries to obtain the file type.
-    """
-    print("------ Processing malware ------")
-    malware_df = load_all_datasets(base_path="./")
-    malware_df = handle_duplicates(malware_df)
-    print(f"Final DataFrame contains {len(malware_df)} unique samples but there are {malware_df['file_path'].isnull().sum()} missing files")
-    print("Of those missing, they come from:\n",malware_df[malware_df["available"]==False]["source"].value_counts())
-    print("="*40)
-    if plot_venn:
-        generate_venn_diagram(malware_df)
-
-    malware_df = add_filetype(malware_df)
-    malware_df["date_added"] = SCRAPING_TIME
-
-    malware_df.to_pickle("malware_df.pkl")
-
-    client = MongoClient(MONGO_CONNECTION_STRING)
+    apt_dict = {}
     try:
-        db = client[MONGO_DATABASE]
-        collection = db[MONGO_MALWARE_COLLECTION]
-        for idx, row in malware_df.iterrows():
-            try:
-                insert_dict_to_mongo(row.to_dict(), collection)
-            except Exception as e:
-                print(f"Failed to insert row at main when processing malware. Row at index {idx}. Exception {e}")
-    finally:
-        client.close()
+        # Read the Excel file
+        df = pd.read_excel(file_path).dropna(how='all')
+    except Exception as e:
+        raise Exception(f"Failed to read {file_path}: {e}")
+    
+    for _, row in df.iloc[1:].iterrows():  # Skip first row
+        common_name = row.iloc[0]
+        names = row.iloc[info["apt_names"][0]:info["apt_names"][1]].dropna()
+        names = ', '.join(map(str, names))
+        operations = [row.iloc[i] for i in range(*info["operations"]) if pd.notna(row.iloc[i])]
+
+        set_nation = nation
+        if nation == "unknown" and pd.notna(row.iloc[10]):
+            set_nation = "unknown"
+        elif nation == "middle_east" and pd.notna(row.iloc[8]):
+            set_nation = row.iloc[8] if "Lebanon" not in str(row.iloc[8]) else "Suspected Iran"
+
+        apt_dict[common_name] = {"synonyms": names, "operations": operations, "nation": set_nation}
+    return apt_dict
 
 
-    print('------ Malware processing completed ------')
-
-def get_virustotal_report(sha256):
+def process_apt_spreadsheet(sheets_folder):
     """
-    Get the VirusTotal report for a given file hash (SHA-256).
+    Processes the APT spreadsheet to extract APT names and operations.
 
-    :param api_key: VirusTotal API key.
-    :param sha256: SHA-256 hash of the file.
-    :return: JSON response from VirusTotal API.
+    Args:
+        sheets_folder (str): Folder containing the extracted sheets.
+    
+    Returns:
+        dict: Dictionary containing APT names and operations
+    
     """
-    url = f"https://www.virustotal.com/api/v3/files/{sha256}"
-    headers = {
-        "x-apikey": VIRUSTOTAL_API_KEY
+    apt_info_dict = {
+        'China': {'apt_names': [0, 12], 'operations': [13, 16]},
+        'Iran': {'apt_names': [0, 11], 'operations': [12, 14]},
+        'Israel': {'apt_names': [0, 4], 'operations': [5, 6]},
+        'Middle East': {'apt_names': [0, 4], 'operations': [5, 7]},  
+        'NATO': {'apt_names': [0, 7], 'operations': [8, 11]},
+        'North Korea': {'apt_names': [0, 13], 'operations': [14, 23]},
+        'Others': {'apt_names': [0, 8], 'operations': [9, 11]},  
+        'Russia': {'apt_names': [0, 15], 'operations': [16, 22]},
+        'Unknown': {'apt_names': [0, 4], 'operations': [5, 7]},
     }
-    response = requests.get(url, headers=headers)
+    apt_names_dict = {}
     
-    if response.status_code == 200:
-        # Save the report to a JSON file
-        with open(f"{PATH_VT_REPORTS}/{sha256}.json", 'w') as file:
-            json.dump(response.json(), file)
-        return True
-    else:
-        print(f"Failed to get report for {sha256}. Status code: {response.status_code}")
-        return None
+    # Extract APT information from each relevant Excel file
+    for nation, info in apt_info_dict.items():
+        xlsx_path = os.path.join(sheets_folder, f"{nation}.xlsx")
+        apt_names_dict.update(extract_apt_info(xlsx_path, nation, info))
+    
+    microsoft_excel_path = os.path.join(sheets_folder, "Microsoft 2023 renaming taxonom.xlsx")
+    apt_names_dict = process_microsoft_excel(apt_names_dict, microsoft_excel_path)
+    
+    # Save the dictionary to a pickle file
+    pickle_file_path = "apt_names_dict.pkl"
+    with open(pickle_file_path, 'wb') as f:
+        pickle.dump(apt_names_dict, f)
+    print(f"APT names dictionary saved to {pickle_file_path}")
 
-def insert_vt_report_to_mongo(report_path, collection):
+    return apt_names_dict
+
+
+# Fetch actors from Malpedia
+def fetch_malpedia_actors(url):
     """
-    Insert the VirusTotal reports to the MongoDB collection.
+    Scrapes Malpedia to extract threat actor information.
 
     Args:
-        report_path (str): Path to the VirusTotal report.
-        collection (pymongo.collection.Collection): Collection to insert the reports.
-    
+        url (str): URL of the Malpedia actors page.
+
+    Returns:
+        dict: Threat actor data including names, synonyms, and country information.
     """
-    with open(report_path, 'r') as file:
-        report = json.load(file)
-    collection.insert_one(report)
+    country_mapping = {
+        "ru": "Russia", "cn": "China", "ir": "Iran", "kp": "North Korea",
+        "tr": "Turkey", "kr": "South Korea", "in": "India", "pk": "Pakistan",
+        "il": "Israel", "us": "United States", "lb": "Lebanon", "sy": "Syria",
+        "ng": "Nigeria", "by": "Belarus", "fr": "France", "br": "Brazil",
+        "iq": "Iraq", "ke": "Kenya", "es": "Spain", "vi": "Vietnam",
+        "tn": "Tunisia", "at": "Austria", "my": "Malaysia", "ro": "Romania",
+        "ps": "Palestina", "id": "Indonesia", "ka": "Kazakhstan"
+    }
+    response = requests.get(url)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, 'html.parser')
+    rows = soup.find_all('tr', class_='clickable-row')
 
-def update_virustotal_reports(malware_df):
-    """
-    Update the VirusTotal reports by downloading the latest version of the reports.
-    """
-    client = MongoClient(MONGO_CONNECTION_STRING)
-    try:
-        db = client[MONGO_DATABASE]
-        collection = db[MONGO_VIRUSTOTAL_COLLECTION]
-        for idx, row in malware_df.iterrows():
-            if not row["virustotal_report_path"]:
-                vt_report = get_virustotal_report(row["sha256"])
-                if vt_report:
-                    row["virustotal_report_path"] = f"{PATH_VT_REPORTS}/{row['sha256']}.json"
-                    insert_vt_report_to_mongo(row["virustotal_report_path"], collection)
-    finally:
-        client.close()
+    actors = {}
+    for row in rows:
+        common_name = row.find('td', class_='common_name').text.strip()
+        synonyms = row.find('td', class_='synonyms').text.strip() if row.find('td', class_='synonyms') else ""
+        synonyms = synonyms.replace('Subgroup: ', ', ')
+        country_span = row.find('td', class_='country').find('span')
+        country_code = country_span['title'] if country_span else "Unknown"
+        country_name = country_mapping.get(country_code, "Unknown")
 
-
-def update_malware():
-    """
-    Update the malware datasets by downloading their last version (at the current version only VX Underground). 
-    """
-    print("------ Updating malware ------")
-    client = MongoClient(MONGO_CONNECTION_STRING)
-    try:
-        db = client[MONGO_DATABASE]
-        collection = db[MONGO_MALWARE_COLLECTION]
-        malware_df = update_vx_underground(collection)
-    finally:
-        client.close()
-
-    update_virustotal_reports(malware_df)
-
-def insert_virustotal_reports():
-    """
-    Upload all the JSON files contained under their path to a new MongoDB collection.
-    
-    """
-    client = MongoClient(MONGO_CONNECTION_STRING)
-    try:
-        db = client[MONGO_DATABASE]
-        collection = db[MONGO_VIRUSTOTAL_COLLECTION]
-        for filename in os.listdir(PATH_VT_REPORTS):
-            if filename.endswith(".json"):
-                insert_vt_report_to_mongo(f"{PATH_VT_REPORTS}/{filename}", collection)
-    finally:
-        client.close()
-        print("------ Upload completed ------")
-
-def insert_synonyms(synonyms):
-    """
-    Insert the synonyms into the MongoDB collection.
-
-    Args:
-        synonyms (dict): Dictionary containing the synonyms.
-
-    """
-    client = MongoClient(MONGO_CONNECTION_STRING)
-    try:
-        db = client[MONGO_DATABASE]
-        collection = db[MONGO_SYNONYMS_COLLECTION]
-        collection.insert_one(synonyms)
-    finally:
-        client.close()
-
-def download_synonyms():
-    """
-
-    """
-    download_github_repo_as_zip("StrangerealIntel", "EternalLiberty")
-    malpedia_url = "https://malpedia.caad.fkie.fraunhofer.de/actors"
-    mitre_url = "https://attack.mitre.org/groups/"
-    ethernal_csv_path = './EternalLiberty/EternalLiberty.csv'
-    spreadsheet_url = "https://docs.google.com/spreadsheets/d/1H9_xaxQHpWaa4O_Son4Gx0YOIzlcBWMsdvePFX68EKU/export?format=xlsx"
-    excel_path = "apt_spreadsheet.xlsx"
-    sheets_folder = "sheets"
-
-    download_apt_spreadsheet(spreadsheet_url, excel_path)
-    extract_sheets_to_folder(excel_path, sheets_folder)
-    actors_excel = process_apt_spreadsheet(sheets_folder)
-
-    actors_malpedia = fetch_malpedia_actors(malpedia_url)
-    actors_mitre = fetch_mitre_actors(mitre_url)
-    actors_ethernal = process_ethernal_csv(ethernal_csv_path)
-
-    with open("synonyms.pkl", "wb") as file:
-        synonyms = {
-            "malpedia": actors_malpedia,
-            "mitre": actors_mitre,
-            "ethernal": actors_ethernal,
-            "excel": actors_excel
+        actors[common_name] = {
+            'synonyms': common_name + ", " + synonyms,
+            'country': country_name
         }
-        pickle.dump(synonyms, file)
-    
+    return actors
 
-    pass
 
-def process_synonyms():
+# Fetch actors from MITRE ATT&CK
+def fetch_mitre_actors(url):
     """
-    
+    Scrapes MITRE ATT&CK to extract threat actor information.
+
+    Args:
+        url (str): URL of the MITRE ATT&CK groups page.
+
+    Returns:
+        dict: Threat actor data including names and synonyms.
     """
-    with open("synonyms.pkl", "rb") as file:
-        synonyms = pickle.load(file)
+    response = requests.get(url)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, 'html.parser')
+    table = soup.find('table', class_='table')
+    rows = table.find('tbody').find_all('tr')
+
+    actors = {}
+    for row in rows:
+        columns = row.find_all('td')
+        if len(columns) >= 3:
+            actors[columns[0].text.strip()] = {
+                'synonyms': columns[0].text.strip() + ", " + columns[1].text.strip() + ", " + columns[2].text.strip()
+            }
+    return actors
     
-    actors_malpedia = synonyms["malpedia"]
-    actors_mitre = synonyms["mitre"]
-    actors_ethernal = synonyms["ethernal"]
-    actors_excel = synonyms["excel"]
-
-    synonyms_merged = merge_actors(actors_malpedia, actors_mitre, actors_ethernal, actors_excel)
-    insert_synonyms(synonyms_merged)
-
-def update_synonyms():
+# Process EternalLiberty CSV
+def process_ethernal_csv(file_path):
     """
-    
+    Processes EternalLiberty CSV file to extract threat actor data.
+
+    Args:
+        file_path (str): Path to the EternalLiberty CSV file.
+
+    Returns:
+        dict: Threat actor data including names, synonyms, and country information.
     """
-    pass
+    ethernal = pd.read_csv(file_path)
+    actors = {}
+    for _, row in ethernal.iterrows():
+        synonyms = []
+        for col in ethernal.columns[4:]:
+            if pd.notna(row[col]):
+                double_name = row[col].split('/')
+                synonyms.extend(double_name if len(double_name) > 1 else [row[col]])
 
-def main():
-    # process the reports
-    asyncio.run(process_reports())
+        actors[row["Threat Actor Official Name"]] = {
+            'synonyms': row["Threat Actor Official Name"] + ", " + ', '.join(synonyms),
+            'country': row['Country'] if pd.notna(row['Country']) else "Unknown"
+        }
+    return actors
 
-    if not os.path.exists("./malware_df.pkl"): # check if the base content is already downloaded
-        download_malware()
-        process_malware()
-        insert_virustotal_reports()
+# Merge actors from various sources
+def merge_actors(merged_apts_alias, actors_dict_to_add, source_name):
+    """
+    Merges actors from multiple sources into a unified dictionary.
 
-    update_malware() # always update malware
+    Args:
+        merged_apts_alias (dict): Existing merged dictionary of actors.
+        actors_dict_to_add (dict): New actors to be merged.
+        source_name (str): Name of the source being merged.
 
-    # I think it is better to update the synonyms every time, as they may have corrections, discuss with IP
-    download_synonyms()
-    process_synonyms()
+    Returns:
+        tuple: Updated dictionary and number of conflicts encountered.
+    """
+    new_rows_apt_alias = {}
+    counter_duplicates_conflict = []
 
-if __name__ == "__main__":
-    main()
+    for common_name_to_add, details_to_add in actors_dict_to_add.items():
+        synonyms_to_add = set(re.split(r', |,', details_to_add["synonyms"]))
+        country_to_add = details_to_add.get('country', 'Unknown')
+        found_match = False
+
+        for common_name_merged, details_merged in merged_apts_alias.items():
+            intersection = details_merged["synonyms"].intersection(synonyms_to_add)
+            if common_name_to_add == common_name_merged or (intersection != {''} and len(intersection) > 0):
+                if found_match:
+                    counter_duplicates_conflict.append(common_name_to_add)
+                found_match = common_name_merged
+                merged_apts_alias[common_name_merged]['synonyms'].update(synonyms_to_add)
+                if country_to_add not in details_merged['nation']:
+                    merged_apts_alias[common_name_merged]['nation'].add(country_to_add)
+
+        if not found_match:
+            new_rows_apt_alias[common_name_to_add] = {
+                "synonyms": synonyms_to_add,
+                "operations": set(),
+                "nation": {country_to_add}
+            }
+
+    merged_apts_alias.update(new_rows_apt_alias)
+    merged_apts_alias.pop('?', None)
+
+    for common_name, details in merged_apts_alias.items():
+        if details["synonyms"]:
+            details["synonyms"].discard("")
+            merged_apts_alias[common_name]["synonyms"] = details["synonyms"]
+
+    return merged_apts_alias, len(counter_duplicates_conflict)
+
+# Count unique synonyms
+def get_unique_synonyms(apts_alias):
+    """
+    Counts unique synonyms from the merged dictionary.
+
+    Args:
+        apts_alias (dict): Merged dictionary of APTs.
+
+    Returns:
+        set: Set of unique synonyms.
+    """
+    list_all_synonyms = set()
+    for common_name, info in apts_alias.items():
+        if info['synonyms']:
+            list_all_synonyms.update(info['synonyms'])
+    return set(list_all_synonyms)
+
+
