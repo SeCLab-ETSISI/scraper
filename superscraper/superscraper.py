@@ -43,7 +43,8 @@ from utils.synonyms_utils import (
     fetch_mitre_actors,
     process_ethernal_csv,
     merge_actors,
-    process_apt_spreadsheet
+    process_apt_spreadsheet,
+    get_unique_synonyms
 )
 from globals import (
     SCRAPING_TIME, GH_TOKEN, VIRUSTOTAL_API_KEY, PATH_VT_REPORTS,
@@ -318,7 +319,7 @@ def download_synonyms():
 
 def process_synonyms():
     """
-    Merge the synonyms 
+    Merge the synonyms...
     """
     with open("synonyms.pkl", "rb") as file:
         synonyms = pickle.load(file)
@@ -328,7 +329,25 @@ def process_synonyms():
     actors_ethernal = synonyms["ethernal"]
     actors_excel = synonyms["excel"]
 
-    synonyms_merged = merge_actors(actors_malpedia, actors_mitre, actors_ethernal, actors_excel)
+    apts_alias = {}
+    for common_name, details in actors_ethernal.items():
+        apts_alias[common_name] = {
+            "synonyms": set(re.split(r', |,', details["synonyms"])),
+            "operations": set(),
+            "nation": {details['country']}
+        }
+
+    # Merge actors from different sources
+    counter_duplicates = 0
+    for source_name, actors_source in [("MITRE", actors_mitre), ("Malpedia", actors_malpedia), ("Excel", actors_excel)]:
+        apts_alias, counter_duplicates_ = merge_actors(apts_alias, actors_source, source_name)
+        print(f"The number of conflicts with duplicate synonyms after adding {source_name} is: {counter_duplicates_}")
+        counter_duplicates += counter_duplicates_
+
+    # Output results
+    print(f"The number of APT Groups Identified is: {len(apts_alias)}")
+    print(f"The number of conflicts with duplicate synonyms is: {counter_duplicates}")
+    print(f"The number of unique synonyms is: {len(get_unique_synonyms(apts_alias))}")
 
 
 def update_synonyms():
