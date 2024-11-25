@@ -8,6 +8,9 @@ from datasketch import MinHash
 import os
 import json
 from pymongo import MongoClient
+import datetime
+
+
 from utils.utils import (
     extract_pdfs_from_repo,
     extract_text_from_url,
@@ -19,17 +22,19 @@ from utils.utils import (
     load_existing_minhashes_from_db,
     get_orkl_report,
     process_orkl_report,
-    download_vx_underground_archive,
-    update_vx_underground
+    # download_vx_underground_archive,
+    # update_vx_underground
 )
 from urllib.parse import urlparse
-from globals import GH_TOKEN, SCRAPING_TIME
+from globals import GH_TOKEN, SCRAPING_TIME, 
 from datasketch import MinHash
 from datetime import datetime
+
 from utils.vx_underground_utils import (
     download_vx_underground_archive, 
     update_vx_underground
 )
+
 from utils.dataframe_utils import (
     load_all_datasets,
     handle_duplicates,
@@ -37,6 +42,8 @@ from utils.dataframe_utils import (
     generate_venn_diagram,
     insert_dict_to_mongo
 )
+
+
 from globals import SCRAPING_TIME, GH_TOKEN, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_MALWARE_COLLECTION, VIRUSTOTAL_API_KEY, PATH_VT_REPORTS, MONGO_VIRUSTOTAL_COLLECTION
 
 def is_github_url(url):
@@ -126,6 +133,8 @@ async def process_reports():
 
     print(f"[!] Failed inserts: {failed_texts}")
     print(f"[!] Successful inserts: {successful_texts}")
+
+
 
 def download_malware():
     """
@@ -288,5 +297,6 @@ def main():
     else:
         update_synonyms()
 
+        
 if __name__ == "__main__":
     main()

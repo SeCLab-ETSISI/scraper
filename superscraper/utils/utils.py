@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 import pdfplumber
 from datasketch import MinHash
 import aiohttp
+from urllib.parse import urlparse
 
 from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN, ORKL_API_URL, SCRAPING_TIME
 
@@ -104,6 +105,7 @@ def download_file(url: str, local_path: str, token: str = None) -> None:
         print(f"[-] Error downloading file: {response.status_code} - {response.text}")
         response.raise_for_status()
 
+
 async def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches: List[str], token: str = None) -> None:
     """
     Extract all PDF files from a GitHub repository and save them locally.
@@ -116,7 +118,7 @@ async def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches
     """
     if token is None:
         raise ValueError("[!] GitHub token is None.")
-    print(f"Using token in extract_pdfs_from_repo: {token[:4]}...")  # Debugging statement
+    
     repo_dir = os.path.join(local_dir, repo)
     if not os.path.exists(repo_dir):
         os.makedirs(repo_dir)
@@ -126,6 +128,7 @@ async def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches
     for branch in branches:
         try:
             sha, valid_branch = await get_github_repo_commit_sha(owner, repo, [branch], token)
+            print(f"[+] Found valid branch '{valid_branch}' with commit SHA: {sha}")
             if sha:  # Check if sha is valid
                 break  # Stop if a valid branch is found
         except ValueError as e:
@@ -350,6 +353,14 @@ def get_orkl_report(offset=0, limit=1):
 
 
 
+def is_github_url(url):
+    """
+    Check if the given URL is a GitHub URL.
+
+    :param url: URL to check.
+    :return: True if URL is a GitHub URL, False otherwise.
+    """
+    return 'github.com' in urlparse(url).netloc
 
 
 
