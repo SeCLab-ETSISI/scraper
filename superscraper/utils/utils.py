@@ -249,7 +249,10 @@ def extract_iocs(text):
     iocs: Dictionary containing extracted IP addresses, domains, and hashes.
     """
     iocs = {
-        'hashes': re.findall(r'\b[a-f0-9]{32,64}\b', text),
+        'md5_hashes': re.findall(r'\b[a-f0-9]{32}\b', text),       # MD5 (32 characters)
+        'sha1_hashes': re.findall(r'\b[a-f0-9]{40}\b', text),      # SHA1 (40 characters)
+        'sha256_hashes': re.findall(r'\b[a-f0-9]{64}\b', text),    # SHA256 (64 characters)
+        'sha512_hashes': re.findall(r'\b[a-f0-9]{128}\b', text),   # SHA512 (128 characters)
         'ip_addrs': re.findall(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', text),
         'domains': re.findall(r'\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,})\b', text)
     }
@@ -295,15 +298,21 @@ def insert_into_db(text, minhash, iocs, link):
     document = {
         "text": text,
         "minhash": minhash_digest,  # Store the digest as a list of integers
-        "hashes": iocs['hashes'],
+        "md5_hashes": iocs['md5_hashes'],
+        "sha1_hashes": iocs['sha1_hashes'],
+        "sha256_hashes": iocs['sha256_hashes'],
+        "sha512_hashes": iocs['sha512_hashes'],
         "ip_addrs": iocs['ip_addrs'],
         "domains": iocs['domains'],
         "date_added": SCRAPING_TIME,
         "url": link
     }
+
     print("[+] Inserting...")
     collection.insert_one(document)
     print("[+] Document inserted successfully.")
+
+
 
 def load_existing_minhashes_from_db():
     """
