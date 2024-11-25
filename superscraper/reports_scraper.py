@@ -69,7 +69,7 @@ async def process_single_link(link, existing_minhashes, mongo_client):
         text = await extract_text_from_url(link)
         if text:
             iocs = extract_iocs(text)
-            insert_into_db(text, existing_minhashes, iocs, link, mongo_client)
+            insert_into_db(text, existing_minhashes, iocs, link)
             return True
     return False
 
