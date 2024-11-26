@@ -475,6 +475,7 @@ def update_vx_underground(collection, base_url="https://vx-underground.org/APTs"
                                     if file_details['sha256'] not in malware_df['sha256'].values: # if the file is not already in malware_df by other source
                                         # Insert a new row for malware_df
                                         del file_details['year'] # remove from file_details the "year" key that is only for vx_underground
+                                        del file_details['file_name'] # remove from file_details the "file_name" key that is only for vx_underground
                                         new_row = insert_new_file_in_malware_df(file_details)
                                         new_malware_rows.append(new_row)
                                     else: # if the file is already in malware_df by other source
