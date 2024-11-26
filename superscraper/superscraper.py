@@ -9,7 +9,9 @@ import os
 import json
 from pymongo import MongoClient
 import datetime
-
+import pickle
+import re
+from datetime import datetime
 
 from utils.utils import (
     extract_pdfs_from_repo,
@@ -198,23 +200,94 @@ def insert_virustotal_reports():
         client.close()
         print("------ Upload completed ------")
 
-def download_synonyms():
+def insert_synonyms(synonyms):
     """
+    Insert the synonyms into the MongoDB collection.
+
+    Args:
+        synonyms (dict): Dictionary containing the synonyms.
 
     """
-    pass
+    client = MongoClient(MONGO_CONNECTION_STRING)
+    try:
+        db = client[MONGO_DATABASE]
+        collection = db[MONGO_SYNONYMS_COLLECTION]
+        collection.insert_one(synonyms)
+    finally:
+        client.close()
+
+def download_synonyms():
+    """
+    Download the synonyms from the different sources and insert them into the MongoDB collection.
+    """
+    download_github_repo_as_zip("StrangerealIntel", "EternalLiberty")
+    ethernal_csv_path = './EternalLiberty/EternalLiberty.csv'
+    actors_ethernal = process_ethernal_csv(ethernal_csv_path)
+
+    malpedia_url = "https://malpedia.caad.fkie.fraunhofer.de/actors"
+    actors_malpedia = fetch_malpedia_actors(malpedia_url)
+    mitre_url = "https://attack.mitre.org/groups/"
+    actors_mitre = fetch_mitre_actors(mitre_url)
+
+    spreadsheet_url = "https://docs.google.com/spreadsheets/d/1H9_xaxQHpWaa4O_Son4Gx0YOIzlcBWMsdvePFX68EKU/export?format=xlsx"
+    excel_path = "apt_spreadsheet.xlsx"
+    sheets_folder = "sheets"
+    download_apt_spreadsheet(spreadsheet_url, excel_path)
+    extract_sheets_to_folder(excel_path, sheets_folder)
+    actors_excel = process_apt_spreadsheet(sheets_folder)
+
+
+    with open("synonyms.pkl", "wb") as file:
+        synonyms = {
+            "malpedia": actors_malpedia,
+            "mitre": actors_mitre,
+            "ethernal": actors_ethernal,
+            "excel": actors_excel
+        }
+        pickle.dump(synonyms, file)
+    
+    insert_synonyms(synonyms)
+
 
 def process_synonyms():
     """
-    
+    Merge the synonyms...
     """
-    pass
+    with open("synonyms.pkl", "rb") as file:
+        synonyms = pickle.load(file)
+    
+    actors_malpedia = synonyms["malpedia"]
+    actors_mitre = synonyms["mitre"]
+    actors_ethernal = synonyms["ethernal"]
+    actors_excel = synonyms["excel"]
+
+    apts_alias = {}
+    for common_name, details in actors_ethernal.items():
+        apts_alias[common_name] = {
+            "synonyms": set(re.split(r', |,', details["synonyms"])),
+            "operations": set(),
+            "nation": {details['country']}
+        }
+
+    # Merge actors from different sources
+    counter_duplicates = 0
+    for source_name, actors_source in [("MITRE", actors_mitre), ("Malpedia", actors_malpedia), ("Excel", actors_excel)]:
+        apts_alias, counter_duplicates_ = merge_actors(apts_alias, actors_source, source_name)
+        print(f"The number of conflicts with duplicate synonyms after adding {source_name} is: {counter_duplicates_}")
+        counter_duplicates += counter_duplicates_
+
+    # Output results
+    print(f"The number of APT Groups Identified is: {len(apts_alias)}")
+    print(f"The number of conflicts with duplicate synonyms is: {counter_duplicates}")
+    print(f"The number of unique synonyms is: {len(get_unique_synonyms(apts_alias))}")
+
 
 def update_synonyms():
     """
     
     """
     pass
+
 def main():
     if not os.path.exists("./malware_df.pkl"): # check if the base content is already downloaded
         download_malware()
@@ -223,11 +296,9 @@ def main():
 
     update_malware() # always update malware
 
-    if not os.path.exists("./synonyms.pkl"):
-        download_synonyms()
-        process_synonyms()
-    else:
-        update_synonyms()
+    # I think it is better to update the synonyms every time, as they may have corrections, discuss with IP
+    download_synonyms()
+    process_synonyms()
 
         
 if __name__ == "__main__":
