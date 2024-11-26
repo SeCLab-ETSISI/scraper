@@ -24,13 +24,9 @@ from utils.utils import (
     load_existing_minhashes_from_db,
     get_orkl_report,
     process_orkl_report,
-    # download_vx_underground_archive,
-    # update_vx_underground
+    download_vx_underground_archive,
+    update_vx_underground
 )
-from urllib.parse import urlparse
-from globals import GH_TOKEN, SCRAPING_TIME, 
-from datasketch import MinHash
-from datetime import datetime
 
 from utils.vx_underground_utils import (
     download_vx_underground_archive, 
@@ -45,8 +41,21 @@ from utils.dataframe_utils import (
     insert_dict_to_mongo
 )
 
-
-from globals import SCRAPING_TIME, GH_TOKEN, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_MALWARE_COLLECTION, VIRUSTOTAL_API_KEY, PATH_VT_REPORTS, MONGO_VIRUSTOTAL_COLLECTION
+from utils.synonyms_utils import (
+    download_apt_spreadsheet,
+    extract_sheets_to_folder,
+    fetch_malpedia_actors,
+    fetch_mitre_actors,
+    process_ethernal_csv,
+    merge_actors,
+    process_apt_spreadsheet,
+    get_unique_synonyms
+)
+from globals import (
+    SCRAPING_TIME, GH_TOKEN, VIRUSTOTAL_API_KEY, PATH_VT_REPORTS,
+    MONGO_CONNECTION_STRING, MONGO_DATABASE, 
+    MONGO_MALWARE_COLLECTION, MONGO_VIRUSTOTAL_COLLECTION, MONGO_SYNONYMS_COLLECTION
+)
 
 def is_github_url(url):
     """
