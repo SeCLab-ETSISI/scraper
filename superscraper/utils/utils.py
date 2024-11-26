@@ -7,6 +7,8 @@ from bs4 import BeautifulSoup
 import pdfplumber
 from datasketch import MinHash
 import aiohttp
+import iocsearcher
+from iocsearcher.searcher import Searcher
 from urllib.parse import urlparse
 
 from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN, ORKL_API_URL, SCRAPING_TIME
@@ -15,6 +17,16 @@ from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLL
 client = MongoClient(MONGO_CONNECTION_STRING)
 db = client[MONGO_DATABASE]
 collection = db[MONGO_COLLECTION]
+
+
+def is_github_url(url):
+    """
+    Check if the given URL is a GitHub URL.
+
+    :param url: URL to check.
+    :return: True if URL is a GitHub URL, False otherwise.
+    """
+    return 'github.com' in urlparse(url).netloc
 
 def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str], token: str) -> str:
     """
@@ -105,7 +117,6 @@ def download_file(url: str, local_path: str, token: str = None) -> None:
         print(f"[-] Error downloading file: {response.status_code} - {response.text}")
         response.raise_for_status()
 
-
 async def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches: List[str], token: str = None) -> None:
     """
     Extract all PDF files from a GitHub repository and save them locally.
@@ -118,7 +129,7 @@ async def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches
     """
     if token is None:
         raise ValueError("[!] GitHub token is None.")
-    
+    print(f"Using token in extract_pdfs_from_repo: {token[:4]}...")  # Debugging statement
     repo_dir = os.path.join(local_dir, repo)
     if not os.path.exists(repo_dir):
         os.makedirs(repo_dir)
@@ -128,7 +139,6 @@ async def extract_pdfs_from_repo(owner: str, repo: str, local_dir: str, branches
     for branch in branches:
         try:
             sha, valid_branch = await get_github_repo_commit_sha(owner, repo, [branch], token)
-            print(f"[+] Found valid branch '{valid_branch}' with commit SHA: {sha}")
             if sha:  # Check if sha is valid
                 break  # Stop if a valid branch is found
         except ValueError as e:
@@ -240,24 +250,22 @@ def getSimilarityFromMinHashes(mh_a, mh_b):
 
 def extract_iocs(text):
     """
-    Extracts IP addresses, domains, and hashes from the given text.
+    Extracts IP addresses, domains, and hashes from the given text using iocsearcher.
 
     Parameters:
     text: The text to extract IOCs from.
 
     Returns:
-    iocs: Dictionary containing extracted IP addresses, domains, and hashes.
+    iocs: List of dictionaries containing extracted IOCs.
     """
-    iocs = {
-        'md5_hashes': re.findall(r'\b[a-f0-9]{32}\b', text),       # MD5 (32 characters)
-        'sha1_hashes': re.findall(r'\b[a-f0-9]{40}\b', text),      # SHA1 (40 characters)
-        'sha256_hashes': re.findall(r'\b[a-f0-9]{64}\b', text),    # SHA256 (64 characters)
-        'sha512_hashes': re.findall(r'\b[a-f0-9]{128}\b', text),   # SHA512 (128 characters)
-        'ip_addrs': re.findall(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', text),
-        'domains': re.findall(r'\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,})\b', text)
-    }
-    return iocs
+    searcher = Searcher()
+    raw_iocs = searcher.search_raw(text)
 
+    iocs = [
+        {"type": item[0], "value": item[1], "offset": item[2], "defanged_value": item[3]}
+        for item in raw_iocs
+    ]
+    return iocs
 
 def is_duplicate(new_minhash, existing_minhashes, threshold=0.3):
     """
@@ -298,21 +306,13 @@ def insert_into_db(text, minhash, iocs, link):
     document = {
         "text": text,
         "minhash": minhash_digest,  # Store the digest as a list of integers
-        "md5_hashes": iocs['md5_hashes'],
-        "sha1_hashes": iocs['sha1_hashes'],
-        "sha256_hashes": iocs['sha256_hashes'],
-        "sha512_hashes": iocs['sha512_hashes'],
-        "ip_addrs": iocs['ip_addrs'],
-        "domains": iocs['domains'],
+        "iocs": iocs,
         "date_added": SCRAPING_TIME,
         "url": link
     }
-
     print("[+] Inserting...")
     collection.insert_one(document)
     print("[+] Document inserted successfully.")
-
-
 
 def load_existing_minhashes_from_db():
     """
@@ -362,14 +362,6 @@ def get_orkl_report(offset=0, limit=1):
 
 
 
-def is_github_url(url):
-    """
-    Check if the given URL is a GitHub URL.
-
-    :param url: URL to check.
-    :return: True if URL is a GitHub URL, False otherwise.
-    """
-    return 'github.com' in urlparse(url).netloc
 
 
 
