@@ -56,22 +56,29 @@ def is_github_url(url):
     :return: True if URL is a GitHub URL, False otherwise.
     """
     return 'github.com' in urlparse(url).netloc
-
+    
 def download_github_repo_as_zip(owner, repo, branch="main"):
     """
     Download a GitHub repository as a zip file.
     """
     url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip"
     response = requests.get(url)
+    
     if response.status_code == 200:
         # Download and extract the zip file
         with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
             zip_ref.extractall("./")
-            os.rename(f"{repo}-{branch}", repo)
-            print(f"{repo} repository downloaded and extracted to the current folder folder.")
+        
+        extracted_folder = f"{repo}-{branch}"
+        target_folder = repo
+        
+        if os.path.exists(target_folder):
+            shutil.rmtree(target_folder)
+        
+        os.rename(extracted_folder, target_folder)
+        print(f"{repo} repository downloaded and extracted to the current folder.")
     else:
         print("Failed to download repository. Please check the repository name and branch.")
-
 
 def download_malware():
     """
@@ -168,7 +175,6 @@ def update_virustotal_reports(malware_df):
     finally:
         client.close()
 
-
 def update_malware():
     """
     Update the malware datasets by downloading their last version (at the current version only VX Underground). 
@@ -247,7 +253,6 @@ def download_synonyms():
         pickle.dump(synonyms, file)
     
     insert_synonyms(synonyms)
-
 
 def process_synonyms():
     """
