@@ -7,6 +7,9 @@ from bs4 import BeautifulSoup
 import pdfplumber
 from datasketch import MinHash
 import aiohttp
+import iocsearcher
+from iocsearcher.searcher import Searcher
+from urllib.parse import urlparse
 
 from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLLECTION, GH_TOKEN, ORKL_API_URL, SCRAPING_TIME
 
@@ -14,6 +17,16 @@ from globals import HEADERS, MONGO_CONNECTION_STRING, MONGO_DATABASE, MONGO_COLL
 client = MongoClient(MONGO_CONNECTION_STRING)
 db = client[MONGO_DATABASE]
 collection = db[MONGO_COLLECTION]
+
+
+def is_github_url(url):
+    """
+    Check if the given URL is a GitHub URL.
+
+    :param url: URL to check.
+    :return: True if URL is a GitHub URL, False otherwise.
+    """
+    return 'github.com' in urlparse(url).netloc
 
 def get_github_repo_commit_sha(owner: str, repo: str, branches: List[str], token: str) -> str:
     """
@@ -237,21 +250,22 @@ def getSimilarityFromMinHashes(mh_a, mh_b):
 
 def extract_iocs(text):
     """
-    Extracts IP addresses, domains, and hashes from the given text.
+    Extracts IP addresses, domains, and hashes from the given text using iocsearcher.
 
     Parameters:
     text: The text to extract IOCs from.
 
     Returns:
-    iocs: Dictionary containing extracted IP addresses, domains, and hashes.
+    iocs: List of dictionaries containing extracted IOCs.
     """
-    iocs = {
-        'hashes': re.findall(r'\b[a-f0-9]{32,64}\b', text),
-        'ip_addrs': re.findall(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', text),
-        'domains': re.findall(r'\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,})\b', text)
-    }
-    return iocs
+    searcher = Searcher()
+    raw_iocs = searcher.search_raw(text)
 
+    iocs = [
+        {"type": item[0], "value": item[1], "offset": item[2], "defanged_value": item[3]}
+        for item in raw_iocs
+    ]
+    return iocs
 
 def is_duplicate(new_minhash, existing_minhashes, threshold=0.3):
     """
@@ -292,9 +306,7 @@ def insert_into_db(text, minhash, iocs, link):
     document = {
         "text": text,
         "minhash": minhash_digest,  # Store the digest as a list of integers
-        "hashes": iocs['hashes'],
-        "ip_addrs": iocs['ip_addrs'],
-        "domains": iocs['domains'],
+        "iocs": iocs,
         "date_added": SCRAPING_TIME,
         "url": link
     }
